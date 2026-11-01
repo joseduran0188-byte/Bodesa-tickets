@@ -1,0 +1,38 @@
+extends layout
+
+block content
+  .page-header
+    h2 Nueva Solicitud de TI
+
+  .form-card
+    form(method="POST" action="/tickets/nuevo")
+      .form-group
+        label(for="titulo") Título de la actividad *
+        input#titulo(type="text" name="titulo" required placeholder="Ej: Instalar impresora en oficina 3")
+
+      .form-group
+        label(for="descripcion") Descripción detallada *
+        textarea#descripcion(name="descripcion" rows="5" required placeholder="Describe qué necesitas...")
+
+      .form-row
+        .form-group
+          label(for="prioridad") Prioridad
+          select#prioridad(name="prioridad")
+            option(value="baja") Baja
+            option(value="media" selected) Media
+            option(value="alta") Alta
+
+        .form-group
+          label(for="categoria") Categoría
+          select#categoria(name="categoria")
+            option(value="") — Seleccionar —
+            option(value="Hardware") Hardware
+            option(value="Software") Software
+            option(value="Red") Red / Internet
+            option(value="Accesos") Accesos / Usuarios
+            option(value="Correo") Correo electrónico
+            option(value="Otro") Otro
+
+      .form-actions
+        a.btn.btn-secondary(href="/tickets") Cancelar
+        button.btn.btn-primary(type="submit") Enviar Solicitud

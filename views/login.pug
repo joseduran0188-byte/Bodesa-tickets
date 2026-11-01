@@ -1,0 +1,21 @@
+doctype html
+html(lang="es")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport" content="width=device-width, initial-scale=1.0")
+    title Iniciar Sesión - Bodesa TI
+    link(rel="stylesheet" href="/css/style.css")
+  body.login-page
+    .login-box
+      h1 Bodesa TI
+      p.subtitle Sistema de Gestión de Solicitudes
+      if error
+        .alert.alert-error= error
+      form(method="POST" action="/login")
+        .form-group
+          label(for="email") Correo electrónico
+          input#email(type="email" name="email" required placeholder="usuario@bodesa.com")
+        .form-group
+          label(for="password") Contraseña
+          input#password(type="password" name="password" required placeholder="••••••••")
+        button.btn.btn-primary(type="submit") Iniciar Sesión
