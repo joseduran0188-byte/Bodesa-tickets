@@ -2,103 +2,114 @@
 extends ../layout
 
 block content
-  .page-header
-    h2= `Mi solicitud #${ticket.id.substring(0, 8)}`
-    a.btn.btn-secondary(href="/usuario/tickets")
-      i.fa-solid.fa-arrow-left
-      |  Volver a mis solicitudes
+    .container
+        .page-header
+            div
+                h2= `Mi solicitud #${ticket.id.substring(0, 8)}`
+                p Bienvenido, #{user.full_name || user.email}
 
-  .detail-card
-    h3 Seguimiento de la solicitud
+            a.btn.btn-secondary(href=dashboardUrl)
+                i.fa-solid.fa-arrow-left
+                |  Volver a mis solicitudes
 
-    .detail-item
-      strong Estado:
-      span(class=`badge badge-estado-${ticket.estado}`)= ticket.estado
+        .detail-card
+            h3 Seguimiento de la solicitud
 
-    .detail-item
-      strong Prioridad:
-      span(class=`badge badge-${ticket.prioridad}`)= ticket.prioridad
+            .detail-item
+                strong Estado:
+                span(class='badge badge-estado-' + ticket.estado)= ticket.estado === 'en_proceso' ? 'En proceso' : ticket.estado
 
-    .detail-item
-      strong Fecha de creación:
-      span= ticket.created_at ? new Date(ticket.created_at).toLocaleString('es-MX') : '—'
+            .detail-item
+                strong Prioridad:
+                span(class='badge badge-' + ticket.prioridad)= ticket.prioridad
 
-    .detail-item
-      strong Fecha de atención:
-      span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : 'Pendiente'
+            .detail-item
+                strong Fecha de creación:
+                span= ticket.created_at ? new Date(ticket.created_at).toLocaleString('es-MX') : '—'
 
-    .detail-item
-      strong Fecha de resolución:
-      span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : 'Pendiente'
+            .detail-item
+                strong Fecha de atención:
+                span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : 'Pendiente'
 
-  .form-card
-    h3 Información de mi solicitud
+            .detail-item
+                strong Fecha de resolución:
+                span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : 'Pendiente'
 
-    if editarTicket
-      form(method="POST" action=`/usuario/tickets/${ticket.id}/actualizar`)
-        .form-group
-          label(for="nombre_solicitante") Nombre del solicitante
-          input#nombre_solicitante(
-            type="text"
-            name="nombre_solicitante"
-            maxlength="150"
-            value=ticket.nombre_solicitante || ''
-            required
-          )
+        .form-card
+            h3 Información de mi solicitud
 
-        .form-group
-          label(for="titulo") Título
-          input#titulo(
-            type="text"
-            name="titulo"
-            maxlength="200"
-            value=ticket.titulo
-            required
-          )
+            if editarTicket
+                form(method="POST" action=dashboardUrl + '/' + ticket.id + '/actualizar')
+                    .form-group
+                        label(for="nombre_solicitante") Nombre del solicitante
+                        input#nombre_solicitante(
+                            type="text"
+                            name="nombre_solicitante"
+                            maxlength="150"
+                            value=ticket.nombre_solicitante || ''
+                            required
+                        )
 
-        .form-group
-          label(for="descripcion") Descripción
-          textarea#descripcion(
-            name="descripcion"
-            rows="6"
-            maxlength="5000"
-            required
-          )= ticket.descripcion
+                    .form-group
+                        label(for="titulo") Título
+                        input#titulo(
+                            type="text"
+                            name="titulo"
+                            maxlength="200"
+                            value=ticket.titulo
+                            required
+                        )
 
-        .form-group
-          label(for="categoria") Categoría
-          select#categoria(name="categoria" required)
-            option(value="general" selected=ticket.categoria === 'general') General
-            option(value="software" selected=ticket.categoria === 'software') Software
-            option(value="hardware" selected=ticket.categoria === 'hardware') Hardware
-            option(value="redes" selected=ticket.categoria === 'redes') Redes
-            option(value="sistemas" selected=ticket.categoria === 'sistemas') Sistemas
-            option(value="accesos" selected=ticket.categoria === 'accesos') Accesos
-            option(value="otro" selected=ticket.categoria === 'otro') Otro
+                    .form-group
+                        label(for="descripcion") Descripción
+                        textarea#descripcion(
+                            name="descripcion"
+                            rows="6"
+                            maxlength="5000"
+                            required
+                        )= ticket.descripcion
 
-        .form-actions
-          button.btn.btn-primary(type="submit")
-            i.fa-solid.fa-floppy-disk
-            |  Guardar cambios
-          a.btn.btn-secondary(href=`/usuario/tickets/${ticket.id}`)
-            | Cancelar
-    else
-      p
-        strong Nombre:
-        |  #{ticket.nombre_solicitante || '—'}
-      p
-        strong Título:
-        |  #{ticket.titulo}
-      p
-        strong Categoría:
-        |  #{ticket.categoria || '—'}
-      p.descripcion= ticket.descripcion
+                    .form-group
+                        label(for="categoria") Categoría
+                        select#categoria(name="categoria" required)
+                            option(value="general" selected=ticket.categoria === 'general') General
+                            option(value="software" selected=ticket.categoria === 'software') Software
+                            option(value="hardware" selected=ticket.categoria === 'hardware') Hardware
+                            option(value="redes" selected=ticket.categoria === 'redes') Redes
+                            option(value="sistemas" selected=ticket.categoria === 'sistemas') Sistemas
+                            option(value="accesos" selected=ticket.categoria === 'accesos') Accesos
+                            option(value="otro" selected=ticket.categoria === 'otro') Otro
 
-      a.btn.btn-secondary(href=`/usuario/tickets/${ticket.id}?editar=1`)
-        i.fa-solid.fa-pen-to-square
-        |  Editar mi solicitud
+                    .form-actions
+                        button.btn.btn-primary(type="submit")
+                            i.fa-solid.fa-floppy-disk
+                            |  Guardar cambios
 
-    if ticket.observaciones
-      .observations-section
-        h4 Respuesta / Observaciones de soporte
-        p.descripcion= ticket.observaciones
+                        a.btn.btn-secondary(href=dashboardUrl + '/' + ticket.id)
+                            | Cancelar
+
+            else
+                .detail-item
+                    strong Nombre:
+                    span= ticket.nombre_solicitante || '—'
+
+                .detail-item
+                    strong Título:
+                    span= ticket.titulo
+
+                .detail-item
+                    strong Categoría:
+                    span= ticket.categoria || '—'
+
+                .detail-item
+                    strong Descripción:
+                    p.descripcion= ticket.descripcion
+
+                a.btn.btn-primary(href=dashboardUrl + '/' + ticket.id + '?editar=1')
+                    i.fa-solid.fa-pen-to-square
+                    |  Editar mi solicitud
+
+            if ticket.observaciones
+                .observations-section
+                    h4 Respuesta / Observaciones de soporte
+                    p.descripcion= ticket.observaciones

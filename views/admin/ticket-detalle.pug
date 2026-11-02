@@ -11,7 +11,7 @@ block content
                     strong Tipo de cuenta:
                     |  Administrador
 
-            a.btn.btn-secondary(href="/admin/tickets")
+            a.btn.btn-secondary(href=dashboardUrl)
                 i.fa-solid.fa-arrow-left
                 |  Volver al panel
 
@@ -42,47 +42,7 @@ block content
             h3 Gestión del ticket
 
             if editarTicket
-                form(method="POST" action=`/admin/tickets/${ticket.id}/actualizar`)
-                    .form-group
-                        label(for="nombre_solicitante") Nombre del solicitante
-                        input#nombre_solicitante(
-                            type="text"
-                            name="nombre_solicitante"
-                            maxlength="150"
-                            value=ticket.nombre_solicitante || ''
-                            required
-                        )
-
-                    .form-group
-                        label(for="titulo") Título
-                        input#titulo(
-                            type="text"
-                            name="titulo"
-                            maxlength="200"
-                            value=ticket.titulo
-                            required
-                        )
-
-                    .form-group
-                        label(for="descripcion") Descripción
-                        textarea#descripcion(
-                            name="descripcion"
-                            rows="5"
-                            maxlength="5000"
-                            required
-                        )= ticket.descripcion
-
-                    .form-group
-                        label(for="categoria") Categoría
-                        select#categoria(name="categoria" required)
-                            option(value="general" selected=ticket.categoria === 'general') General
-                            option(value="software" selected=ticket.categoria === 'software') Software
-                            option(value="hardware" selected=ticket.categoria === 'hardware') Hardware
-                            option(value="redes" selected=ticket.categoria === 'redes') Redes
-                            option(value="sistemas" selected=ticket.categoria === 'sistemas') Sistemas
-                            option(value="accesos" selected=ticket.categoria === 'accesos') Accesos
-                            option(value="otro" selected=ticket.categoria === 'otro') Otro
-
+                form(method="POST" action=dashboardUrl + '/' + ticket.id + '/actualizar')
                     .form-group
                         label(for="prioridad") Prioridad
                         select#prioridad(name="prioridad" required)
@@ -121,7 +81,7 @@ block content
                             i.fa-solid.fa-floppy-disk
                             |  Guardar cambios
 
-                        a.btn.btn-secondary(href=`/admin/tickets/${ticket.id}`)
+                        a.btn.btn-secondary(href=dashboardUrl + '/' + ticket.id)
                             | Cancelar
 
             else
@@ -153,6 +113,15 @@ block content
                     strong Observaciones:
                     p.descripcion= ticket.observaciones || 'Sin observaciones'
 
-                a.btn.btn-primary(href=`/admin/tickets/${ticket.id}?editar=1`)
+                a.btn.btn-primary(href=dashboardUrl + '/' + ticket.id + '?editar=1')
                     i.fa-solid.fa-pen-to-square
                     |  Editar ticket
+
+                form(
+                    method="POST"
+                    action=dashboardUrl + '/' + ticket.id + '/eliminar'
+                    onsubmit="return confirm('¿Estás seguro de eliminar este ticket?');"
+                )
+                    button.btn.btn-danger(type="submit")
+                        i.fa-solid.fa-trash
+                        |  Eliminar ticket

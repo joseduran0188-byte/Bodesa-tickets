@@ -2,64 +2,119 @@
 extends ../layout
 
 block content
-  .page-header
-    h2= `Atención del ticket #${ticket.id.substring(0, 8)}`
-    a.btn.btn-secondary(href="/tecnico/tickets")
-      i.fa-solid.fa-arrow-left
-      |  Volver al panel
+    .container
+        .page-header
+            div
+                h2= `Ticket #${ticket.id.substring(0, 8)}`
+                p Bienvenido, #{user.full_name || user.email}
+                p
+                    strong Tipo de cuenta:
+                    |  Técnico de TI
 
-  .detail-card
-    h3 Datos de la solicitud
-    p
-      strong Solicitante:
-      |  #{ticket.nombre_solicitante || '—'}
-    p
-      strong Título:
-      |  #{ticket.titulo}
-    p
-      strong Categoría:
-      |  #{ticket.categoria || '—'}
-    p
-      strong Descripción:
-    p.descripcion= ticket.descripcion
+            a.btn.btn-secondary(href=dashboardUrl)
+                i.fa-solid.fa-arrow-left
+                |  Volver al panel
 
-  .form-card
-    h3 Actualizar atención técnica
+        .detail-card
+            h3 Información de la solicitud
 
-    form(method="POST" action=`/tecnico/tickets/${ticket.id}/actualizar`)
-      input(type="hidden" name="nombre_solicitante" value=ticket.nombre_solicitante || '')
-      input(type="hidden" name="titulo" value=ticket.titulo)
-      input(type="hidden" name="descripcion" value=ticket.descripcion)
-      input(type="hidden" name="categoria" value=ticket.categoria || 'general')
+            .detail-item
+                strong Folio:
+                span= ticket.id
 
-      .form-row
-        .form-group
-          label(for="estado") Estado
-          select#estado(name="estado" required)
-            option(value="pendiente" selected=ticket.estado === 'pendiente') Pendiente
-            option(value="en_proceso" selected=ticket.estado === 'en_proceso') En proceso
-            option(value="resuelto" selected=ticket.estado === 'resuelto') Resuelto
-            option(value="cancelado" selected=ticket.estado === 'cancelado') Cancelado
+            .detail-item
+                strong Solicitante:
+                span= ticket.nombre_solicitante || 'Sin nombre registrado'
 
-        .form-group
-          label(for="prioridad") Prioridad
-          select#prioridad(name="prioridad" required)
-            option(value="baja" selected=ticket.prioridad === 'baja') Baja
-            option(value="media" selected=ticket.prioridad === 'media') Media
-            option(value="alta" selected=ticket.prioridad === 'alta') Alta
-            option(value="urgente" selected=ticket.prioridad === 'urgente') Urgente
+            .detail-item
+                strong Título:
+                span= ticket.titulo
 
-      .form-group
-        label(for="responsable") Responsable
-        input#responsable(type="text" name="responsable" maxlength="150" value=ticket.responsable || '')
+            .detail-item
+                strong Descripción:
+                p.descripcion= ticket.descripcion
 
-      .form-group
-        label(for="observaciones") Observaciones técnicas
-        textarea#observaciones(name="observaciones" rows="5" maxlength="5000")= ticket.observaciones || ''
+            .detail-item
+                strong Categoría:
+                span= ticket.categoria || '—'
 
-      .form-actions
-        button.btn.btn-primary(type="submit")
-          i.fa-solid.fa-floppy-disk
-          |  Guardar atención
-        a.btn.btn-secondary(href="/tecnico/tickets")
-          | Cancelar
+            .detail-item
+                strong Fecha de creación:
+                span= ticket.created_at ? new Date(ticket.created_at).toLocaleString('es-MX') : '—'
+
+            .detail-item
+                strong Fecha de atención:
+                span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : 'Pendiente'
+
+            .detail-item
+                strong Fecha de resolución:
+                span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : 'Pendiente'
+
+        .form-card
+            h3 Atención del ticket
+
+            if editarTicket
+                form(method="POST" action=dashboardUrl + '/' + ticket.id + '/actualizar')
+                    .form-group
+                        label(for="prioridad") Prioridad
+                        select#prioridad(name="prioridad" required)
+                            option(value="baja" selected=ticket.prioridad === 'baja') Baja
+                            option(value="media" selected=ticket.prioridad === 'media') Media
+                            option(value="alta" selected=ticket.prioridad === 'alta') Alta
+                            option(value="urgente" selected=ticket.prioridad === 'urgente') Urgente
+
+                    .form-group
+                        label(for="estado") Estado
+                        select#estado(name="estado" required)
+                            option(value="pendiente" selected=ticket.estado === 'pendiente') Pendiente
+                            option(value="en_proceso" selected=ticket.estado === 'en_proceso') En proceso
+                            option(value="resuelto" selected=ticket.estado === 'resuelto') Resuelto
+                            option(value="cancelado" selected=ticket.estado === 'cancelado') Cancelado
+
+                    .form-group
+                        label(for="responsable") Responsable
+                        input#responsable(
+                            type="text"
+                            name="responsable"
+                            maxlength="150"
+                            value=ticket.responsable || ''
+                            placeholder="Nombre del responsable"
+                        )
+
+                    .form-group
+                        label(for="observaciones") Observaciones de soporte
+                        textarea#observaciones(
+                            name="observaciones"
+                            rows="5"
+                            maxlength="5000"
+                            placeholder="Describe las acciones realizadas o la solución aplicada"
+                        )= ticket.observaciones || ''
+
+                    .form-actions
+                        button.btn.btn-primary(type="submit")
+                            i.fa-solid.fa-floppy-disk
+                            |  Guardar atención
+
+                        a.btn.btn-secondary(href=dashboardUrl + '/' + ticket.id)
+                            | Cancelar
+
+            else
+                .detail-item
+                    strong Prioridad:
+                    span= ticket.prioridad || '—'
+
+                .detail-item
+                    strong Estado:
+                    span= ticket.estado || '—'
+
+                .detail-item
+                    strong Responsable:
+                    span= ticket.responsable || 'Sin asignar'
+
+                .detail-item
+                    strong Observaciones:
+                    p.descripcion= ticket.observaciones || 'Sin observaciones'
+
+                a.btn.btn-primary(href=dashboardUrl + '/' + ticket.id + '?editar=1')
+                    i.fa-solid.fa-pen-to-square
+                    |  Atender ticket

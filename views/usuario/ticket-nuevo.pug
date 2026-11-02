@@ -2,71 +2,77 @@
 extends ../layout
 
 block content
-  .page-header
-    h2 Crear solicitud
-    a.btn.btn-secondary(href="/usuario/tickets")
-      i.fa-solid.fa-arrow-left
-      |  Volver
+    .container
+        .page-header
+            div
+                h2 Crear solicitud
+                p Registra una nueva necesidad para el área de TI.
 
-  .form-card
-    h3 Datos de la solicitud
+            a.btn.btn-secondary(href=dashboardUrl)
+                i.fa-solid.fa-arrow-left
+                |  Volver
 
-    if error
-      .alert.alert-danger= error
+        .form-card
+            h3 Datos de la solicitud
 
-    form(method="POST" action="/usuario/tickets/nuevo")
-      .form-group
-        label(for="nombre_solicitante") Nombre del solicitante
-        input#nombre_solicitante(
-          type="text"
-          name="nombre_solicitante"
-          maxlength="150"
-          required
-          placeholder="Escribe tu nombre completo"
-        )
+            if error
+                .alert.alert-danger= error
 
-      .form-group
-        label(for="titulo") Título de la solicitud
-        input#titulo(
-          type="text"
-          name="titulo"
-          maxlength="200"
-          required
-          placeholder="Describe brevemente tu necesidad"
-        )
+            form(method="POST" action=nuevoTicketUrl)
+                .form-group
+                    label(for="nombre_solicitante") Nombre del solicitante
+                    input#nombre_solicitante(
+                        type="text"
+                        name="nombre_solicitante"
+                        maxlength="150"
+                        required
+                        placeholder="Escribe tu nombre completo"
+                        value=user.full_name || ''
+                    )
 
-      .form-group
-        label(for="descripcion") Descripción
-        textarea#descripcion(
-          name="descripcion"
-          rows="6"
-          maxlength="5000"
-          required
-          placeholder="Explica detalladamente lo que necesitas"
-        )
+                .form-group
+                    label(for="titulo") Título de la solicitud
+                    input#titulo(
+                        type="text"
+                        name="titulo"
+                        maxlength="200"
+                        required
+                        placeholder="Describe brevemente tu necesidad"
+                    )
 
-      .form-group
-        label(for="categoria") Categoría
-        select#categoria(name="categoria" required)
-          option(value="general") General
-          option(value="software") Software
-          option(value="hardware") Hardware
-          option(value="redes") Redes
-          option(value="sistemas") Sistemas
-          option(value="accesos") Accesos
-          option(value="otro") Otro
+                .form-group
+                    label(for="descripcion") Descripción
+                    textarea#descripcion(
+                        name="descripcion"
+                        rows="6"
+                        maxlength="5000"
+                        required
+                        placeholder="Explica detalladamente lo que necesitas"
+                    )
 
-      .form-group
-        label(for="prioridad") Prioridad
-        select#prioridad(name="prioridad" required)
-          option(value="baja") Baja
-          option(value="media" selected) Media
-          option(value="alta") Alta
-          option(value="urgente") Urgente
+                .form-group
+                    label(for="categoria") Categoría
+                    select#categoria(name="categoria" required)
+                        option(value="general" selected) General
+                        option(value="software") Software
+                        option(value="hardware") Hardware
+                        option(value="redes") Redes
+                        option(value="sistemas") Sistemas
+                        option(value="accesos") Accesos
+                        option(value="otro") Otro
 
-      .form-actions
-        button.btn.btn-primary(type="submit")
-          i.fa-solid.fa-paper-plane
-          |  Registrar solicitud
-        a.btn.btn-secondary(href="/usuario/tickets")
-          | Cancelar
+                .form-group
+                    label(for="prioridad") Prioridad
+                    select#prioridad(name="prioridad" required)
+                        option(value="baja") Baja
+                        option(value="media" selected) Media
+                        option(value="alta") Alta
+                        option(value="urgente") Urgente
+
+                .form-actions
+                    button.btn.btn-primary(type="submit")
+                        i.fa-solid.fa-paper-plane
+                        |  Registrar solicitud
+
+                    a.btn.btn-secondary(href=dashboardUrl)
+                        | Cancelar
