@@ -546,4 +546,130 @@ footer {
   .form-actions .btn {
     width: 100%;
   }
+  
+/* =========================================
+   ACCIONES DEL DASHBOARD
+========================================= */
+
+.tickets-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tickets-table th,
+.tickets-table td {
+  vertical-align: middle;
+}
+
+.tickets-table th:last-child {
+  text-align: center;
+  min-width: 230px;
+}
+
+.tickets-table td.actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 230px;
+  padding: 16px 12px;
+  white-space: nowrap;
+}
+
+/* Formulario de eliminación */
+.tickets-table td.actions form {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+/* Botones de acciones */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid #dbe1ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease,
+              border-color 0.2s ease,
+              color 0.2s ease,
+              transform 0.2s ease;
+}
+
+.action-btn i {
+  font-size: 14px;
+}
+
+/* Ver */
+.action-btn[title="Ver solicitud"] {
+  color: #2451b7;
+}
+
+.action-btn[title="Ver solicitud"]:hover {
+  background: #eff5ff;
+  border-color: #2451b7;
+}
+
+/* Editar */
+.action-btn[title="Editar descripción"] {
+  color: #16804a;
+}
+
+.action-btn[title="Editar descripción"]:hover {
+  background: #ecfdf3;
+  border-color: #16804a;
+}
+
+/* Eliminar */
+.action-btn.action-delete {
+  color: #dc2626;
+}
+
+.action-btn.action-delete:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+/* Efecto al pasar el cursor */
+.action-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Evitar que los botones se deformen */
+.tickets-table td.actions > * {
+  flex-shrink: 0;
+}
+
+/* =========================================
+   RESPONSIVE
+========================================= */
+
+@media (max-width: 900px) {
+  .tickets-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .tickets-table {
+    min-width: 1050px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tickets-table td.actions {
+    justify-content: flex-start;
+  }
+}
+
 }
