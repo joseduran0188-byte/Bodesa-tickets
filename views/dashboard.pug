@@ -1,31 +1,74 @@
 
-td.actions
-  //- Ver ticket
-  a.action-btn(
-    href=`/tickets/${ticket.id}`
-    title="Ver ticket"
-    aria-label="Ver ticket"
-  )
-    i(class="fa-solid fa-eye")
+extends layout
 
-  //- Editar descripción
-  a.action-btn(
-    href=`/tickets/${ticket.id}`
-    title="Editar ticket"
-    aria-label="Editar ticket"
-  )
-    i(class="fa-solid fa-pen-to-square")
+block content
+  .page-header
+    h2 Gestión de solicitudes
+    a.btn.btn-primary(href="/tickets/nuevo") + Nuevo ticket
 
-  //- Eliminar ticket: solamente administrador
-  if user.role === 'admin'
-    form(
-      method="POST"
-      action=`/tickets/${ticket.id}/eliminar`
-      onsubmit="return confirm('¿Estás seguro de eliminar este ticket? Esta acción no se puede deshacer.');"
-    )
-      button.action-btn.action-delete(
-        type="submit"
-        title="Eliminar ticket"
-        aria-label="Eliminar ticket"
-      )
-        i(class="fa-solid fa-trash")
+  .table-container
+    table
+      thead
+        tr
+          th Folio
+          th Título
+          th Solicitante
+          th Categoría
+          th Prioridad
+          th Estado
+          th Fecha de creación
+          th Acciones
+
+      tbody
+        if tickets && tickets.length
+          each ticket in tickets
+            tr
+              td= ticket.id
+              td= ticket.titulo
+              td= ticket.solicitante ? ticket.solicitante.full_name : '—'
+              td= ticket.categoria || '—'
+
+              td
+                span(class=`badge badge-${ticket.prioridad}`)
+                  = ticket.prioridad
+
+              td
+                span(class=`badge badge-estado-${ticket.estado}`)
+                  = ticket.estado
+
+              td= new Date(ticket.fecha_creacion).toLocaleDateString('es-MX')
+
+              //- ACCIONES
+              td.actions
+                //- Ver ticket
+                a.action-btn(
+                  href=`/tickets/${ticket.id}`
+                  title="Ver ticket"
+                  aria-label="Ver ticket"
+                )
+                  i(class="fa-solid fa-eye")
+
+                //- Editar descripción
+                a.action-btn(
+                  href=`/tickets/${ticket.id}`
+                  title="Editar ticket"
+                  aria-label="Editar ticket"
+                )
+                  i(class="fa-solid fa-pen-to-square")
+
+                //- Eliminar: solamente administrador
+                if user.role === 'admin'
+                  form(
+                    method="POST"
+                    action=`/tickets/${ticket.id}/eliminar`
+                    onsubmit="return confirm('¿Estás seguro de eliminar este ticket? Esta acción no se puede deshacer.');"
+                  )
+                    button.action-btn.action-delete(
+                      type="submit"
+                      title="Eliminar ticket"
+                      aria-label="Eliminar ticket"
+                    )
+                      i(class="fa-solid fa-trash")
+        else
+          tr
+            td(colspan="8") No hay solicitudes registradas.
