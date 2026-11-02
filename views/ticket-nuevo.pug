@@ -1,38 +1,63 @@
 extends layout
 
 block content
-  .page-header
-    h2 Nueva Solicitud de TI
+    .container
+        .page-header
+            h1 Crear nuevo ticket
+            p Registra una necesidad o solicitud para el área de TI.
 
-  .form-card
-    form(method="POST" action="/tickets/nuevo")
-      .form-group
-        label(for="titulo") Título de la actividad *
-        input#titulo(type="text" name="titulo" required placeholder="Ej: Instalar impresora en oficina 3")
+        if error
+            .alert.alert-danger= error
 
-      .form-group
-        label(for="descripcion") Descripción detallada *
-        textarea#descripcion(name="descripcion" rows="5" required placeholder="Describe qué necesitas...")
+        form(action='/tickets/nuevo' method='POST')
+            .form-group
+                label(for='nombre_solicitante') Nombre del solicitante
+                input#nombre_solicitante(
+                    type='text'
+                    name='nombre_solicitante'
+                    maxlength='150'
+                    placeholder='Escribe tu nombre completo'
+                    required
+                )
 
-      .form-row
-        .form-group
-          label(for="prioridad") Prioridad
-          select#prioridad(name="prioridad")
-            option(value="baja") Baja
-            option(value="media" selected) Media
-            option(value="alta") Alta
+            .form-group
+                label(for='titulo') Nombre de la actividad o solicitud
+                input#titulo(
+                    type='text'
+                    name='titulo'
+                    maxlength='200'
+                    placeholder='Ej. Solicitud de equipo de cómputo'
+                    required
+                )
 
-        .form-group
-          label(for="categoria") Categoría
-          select#categoria(name="categoria")
-            option(value="") — Seleccionar —
-            option(value="Hardware") Hardware
-            option(value="Software") Software
-            option(value="Red") Red / Internet
-            option(value="Accesos") Accesos / Usuarios
-            option(value="Correo") Correo electrónico
-            option(value="Otro") Otro
+            .form-group
+                label(for='descripcion') Descripción de la necesidad
+                textarea#descripcion(
+                    name='descripcion'
+                    rows='5'
+                    placeholder='Describe detalladamente lo que necesitas...'
+                    required
+                )
 
-      .form-actions
-        a.btn.btn-secondary(href="/tickets") Cancelar
-        button.btn.btn-primary(type="submit") Enviar Solicitud
+            .form-group
+                label(for='categoria') Categoría
+                select#categoria(name='categoria' required)
+                    option(value='general') General
+                    option(value='software') Software
+                    option(value='hardware') Hardware
+                    option(value='redes') Redes
+                    option(value='sistemas') Sistemas
+                    option(value='accesos') Accesos y permisos
+                    option(value='otro') Otro
+
+            .form-group
+                label(for='prioridad') Prioridad
+                select#prioridad(name='prioridad' required)
+                    option(value='baja') Baja
+                    option(value='media' selected) Media
+                    option(value='alta') Alta
+                    option(value='urgente') Urgente
+
+            .form-actions
+                button.btn.btn-primary(type='submit') Registrar solicitud
+                a.btn.btn-secondary(href='/tickets') Cancelar

@@ -2,109 +2,70 @@
 extends layout
 
 block content
-  .page-header
-    div
-      h2 Dashboard de Solicitudes
-      p.help-text Administración y seguimiento de solicitudes del departamento de TI.
+    .container
+        .page-header
+            div
+                h1 Panel de tickets
+                p Bienvenido, #{user.full_name || user.email}
 
-    a.btn.btn-primary(href="/tickets/nuevo")
-      i.fa-solid.fa-plus
-      |  Nueva Solicitud
+                p
+                    strong Tipo de cuenta:
+                    if user.role === 'admin'
+                        |  Administrador
+                    else if user.role === 'tecnico'
+                        |  Técnico de TI
+                    else
+                        |  Usuario
 
-  if !tickets || tickets.length === 0
-    .empty-state
-      i.fa-solid.fa-inbox
-      h3 No hay solicitudes registradas
-      p Todavía no existen solicitudes en el sistema.
+            a.btn.btn-primary(href='/tickets/nuevo') + Nuevo ticket
 
-      a.btn.btn-primary(href="/tickets/nuevo")
-        i.fa-solid.fa-plus
-        |  Crear la primera solicitud
+        if tickets && tickets.length
+            .table-responsive
+                table.table
+                    thead
+                        tr
+                            th Folio
+                            th Solicitud
+                            th Solicitante
+                            th Prioridad
+                            th Estado
+                            th Responsable
+                            th Fecha
+                            th Acciones
 
-  else
-    .tickets-table-wrapper
-      table.tickets-table
-        thead
-          tr
-            th Prioridad
-            th Título
-            th Estado
-            th Solicitante
-            th.responsable-column Responsable de atención
-            th Fecha de creación
-            th.actions-heading Acciones
+                    tbody
+                        each ticket in tickets
+                            tr
+                                td= ticket.id
+                                td= ticket.titulo
+                                td= ticket.nombre_solicitante || 'Sin nombre registrado'
 
-        tbody
-          each ticket in tickets
-            tr
-              //- Prioridad
-              td
-                span(class='badge badge-' + (ticket.prioridad || ''))
-                  = ticket.prioridad || 'Sin prioridad'
+                                td
+                                    span(class='priority priority-' + (ticket.prioridad || 'media'))
+                                        = ticket.prioridad || 'Media'
 
-              //- Título
-              td.ticket-title
-                strong= ticket.titulo || 'Sin título'
+                                td
+                                    span(class='status status-' + (ticket.estado || 'pendiente'))
+                                        = ticket.estado || 'Pendiente'
 
-              //- Estado
-              td
-                span(class='badge badge-estado-' + (ticket.estado || ''))
-                  = ticket.estado || 'Sin estado'
+                                td= ticket.responsable || 'Sin asignar'
 
-              //- Solicitante
-              td
-                if ticket.solicitante && ticket.solicitante.full_name
-                  = ticket.solicitante.full_name
-                else
-                  | —
+                                td= ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('es-MX') : '—'
 
-              //- Responsable de atención
-              td.responsable-column
-                if ticket.responsable
-                  = ticket.responsable
-                else
-                  span.text-muted Sin asignar
+                                td
+                                    a.btn.btn-small(href='/tickets/' + ticket.id) Ver
 
-              //- Fecha de creación (horario de Colima, México)
-              td.ticket-date
-                if ticket.fecha_creacion
-                  = new Date(ticket.fecha_creacion).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-                else
-                  | —
+                                    if user.role === 'admin'
+                                        form(
+                                            action='/tickets/' + ticket.id + '/eliminar'
+                                            method='POST'
+                                            onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
+                                        )
+                                            button.btn.btn-danger.btn-small(type='submit')
+                                                | Eliminar
 
-              //- Acciones
-              td.actions
-                .action-buttons
-
-                  //- Ver solicitud
-                  a.action-btn.action-view(
-                    href='/tickets/' + ticket.id
-                    title="Ver solicitud"
-                    aria-label="Ver solicitud"
-                  )
-                    i.fa-solid.fa-eye
-                    span Ver
-
-                  //- Editar descripción
-                  a.action-btn.action-edit(
-                    href='/tickets/' + ticket.id + '?editar=1#editar-descripcion'
-                    title="Editar descripción"
-                    aria-label="Editar descripción"
-                  )
-                    i.fa-solid.fa-pen-to-square
-                    span Editar
-
-                  //- Eliminar: solamente administrador
-                  if user && user.role === 'admin'
-                    form.action-form(
-                      method="POST"
-                      action='/tickets/' + ticket.id + '/eliminar'
-                      onsubmit="return confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.');"
-                    )
-                      button.action-btn.action-delete(
-                        type="submit"
-                        title="Eliminar solicitud"
-                        aria-label="Eliminar solicitud"
-                      )
-                        i.fa-solid.fa-trash
-                        span Eliminar
+        else
+            .empty-state
+                h3 No hay tickets registrados
+                p Cuando registres una solicitud, aparecerá aquí.
+                a.btn.btn-primary(href='/tickets/nuevo') Crear primer ticket
