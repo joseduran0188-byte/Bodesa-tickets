@@ -1,0 +1,98 @@
+
+extends ../layout
+
+block content
+    .container
+        .page-header
+            div
+                h1 Detalle del ticket
+                p Folio: #{ticket.id}
+                p Bienvenido, #{user.full_name || user.email}
+
+                p
+                    strong Tipo de cuenta:
+                    |  Administrador
+
+            a.btn.btn-secondary(href='/tickets')
+                i.fa-solid.fa-arrow-left
+                |  Volver al panel
+
+        .ticket-detail-card
+            form(action='/tickets/' + ticket.id + '/actualizar' method='POST')
+                .form-group
+                    label(for='nombre_solicitante') Nombre del solicitante
+                    input#nombre_solicitante(
+                        type='text'
+                        name='nombre_solicitante'
+                        value=ticket.nombre_solicitante || ''
+                        maxlength='150'
+                        required
+                    )
+
+                .form-group
+                    label(for='titulo') Título de la solicitud
+                    input#titulo(
+                        type='text'
+                        name='titulo'
+                        value=ticket.titulo || ''
+                        maxlength='200'
+                        required
+                    )
+
+                .form-group
+                    label(for='descripcion') Descripción
+                    textarea#descripcion(
+                        name='descripcion'
+                        rows='5'
+                        maxlength='5000'
+                        required
+                    )= ticket.descripcion || ''
+
+                .form-group
+                    label(for='categoria') Categoría
+                    select#categoria(name='categoria' required)
+                        each categoria in ['general', 'software', 'hardware', 'redes', 'sistemas', 'accesos', 'otro']
+                            option(
+                                value=categoria
+                                selected=ticket.categoria === categoria
+                            )= categoria.charAt(0).toUpperCase() + categoria.slice(1)
+
+                .form-group
+                    label(for='prioridad') Prioridad
+                    select#prioridad(name='prioridad' required)
+                        each prioridad in ['baja', 'media', 'alta', 'urgente']
+                            option(
+                                value=prioridad
+                                selected=ticket.prioridad === prioridad
+                            )= prioridad.charAt(0).toUpperCase() + prioridad.slice(1)
+
+                .form-group
+                    label(for='estado') Estado
+                    select#estado(name='estado' required)
+                        each estado in ['pendiente', 'en_proceso', 'resuelto', 'cancelado']
+                            option(
+                                value=estado
+                                selected=ticket.estado === estado
+                            )= estado === 'en_proceso' ? 'En proceso' : estado.charAt(0).toUpperCase() + estado.slice(1)
+
+                .form-group
+                    label(for='responsable') Responsable
+                    input#responsable(
+                        type='text'
+                        name='responsable'
+                        value=ticket.responsable || ''
+                        maxlength='150'
+                    )
+
+                .form-group
+                    label(for='observaciones') Observaciones
+                    textarea#observaciones(
+                        name='observaciones'
+                        rows='4'
+                        maxlength='5000'
+                    )= ticket.observaciones || ''
+
+                .form-actions
+                    button.btn.btn-primary(type='submit')
+                        i.fa-solid.fa-floppy-disk
+                        |  Guardar cambios
