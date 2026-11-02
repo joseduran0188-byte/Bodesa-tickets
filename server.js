@@ -1,7 +1,12 @@
 
-// server.js
+// =====================================================
+// BODESA TICKETS - SERVIDOR EXPRESS
+// Compatible con desarrollo local y Vercel
+// =====================================================
 
-// 1. Variables de entorno
+// Cargar variables locales.
+// En Vercel se utilizarán las variables configuradas
+// desde el panel de Environment Variables.
 require('dotenv').config({ path: '.env.local' });
 
 const express = require('express');
@@ -10,47 +15,71 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const helmet = require('helmet');
 
-// 2. Importar rutas
+// Importar rutas
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
 const exportRoutes = require('./routes/export');
 
-// 3. Crear aplicación Express
+// Crear aplicación
 const app = express();
 
-// 4. Configuración de Pug
+// Confiar en el proxy de Vercel
+app.set('trust proxy', 1);
+
+// Configuración de Pug
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
 
-// 5. Middlewares
+// Middlewares de seguridad
 app.use(helmet({
   contentSecurityPolicy: false
 }));
 
+// Middlewares generales
 app.use(morgan('dev'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// 6. Archivos estáticos
+// Archivos estáticos
+// Localmente Express sirve public/.
+// En Vercel, los archivos de public/ se sirven mediante su CDN.
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 7. Registrar rutas
+// Registrar rutas
 app.use('/', authRoutes);
 app.use('/tickets', ticketRoutes);
 app.use('/export', exportRoutes);
 
-// 8. Ruta principal
+// Ruta principal
 app.get('/', (req, res) => {
   res.redirect('/login');
 });
 
-// 9. Ruta para páginas no encontradas
+// Página no encontrada
 app.use((req, res) => {
-  res.status(404).send('Página no encontrada: ' + req.originalUrl);
+  res.status(404).send(
+    'Página no encontrada: ' + req.originalUrl
+  );
 });
 
-// 10. Iniciar servidor
+// Manejador general de errores
+app.use((err, req, res, next) => {
+  console.error('Error general:', err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).send('Error interno del servidor.');
+});
+
+// =====================================================
+// INICIO LOCAL
+// En Vercel se exporta la aplicación sin abrir
+// un servidor mediante app.listen().
+// =====================================================
+
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
@@ -59,4 +88,5 @@ if (require.main === module) {
   });
 }
 
+// Exportar aplicación para Vercel
 module.exports = app;
