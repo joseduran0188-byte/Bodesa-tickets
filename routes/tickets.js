@@ -4,9 +4,12 @@ const router = express.Router();
 
 const {
     requireAuth,
-    requireStaff,
     requireOnlyAdmin
 } = require('../middleware/auth');
+
+// ============================================
+// CONFIGURACIÓN
+// ============================================
 
 const CATEGORIAS = [
     'general',
@@ -18,7 +21,12 @@ const CATEGORIAS = [
     'otro'
 ];
 
-const PRIORIDADES = ['baja', 'media', 'alta', 'urgente'];
+const PRIORIDADES = [
+    'baja',
+    'media',
+    'alta',
+    'urgente'
+];
 
 const ESTADOS = [
     'pendiente',
@@ -26,6 +34,10 @@ const ESTADOS = [
     'resuelto',
     'cancelado'
 ];
+
+// ============================================
+// FUNCIONES AUXILIARES
+// ============================================
 
 function limpiar(valor) {
     return typeof valor === 'string' ? valor.trim() : '';
@@ -73,17 +85,13 @@ router.get('/', requireAuth, async (req, res) => {
             return res.status(403).send('Rol no autorizado.');
         }
 
+        // Consultar tickets sin relaciones anidadas.
         let query = req.supabase
             .from('tickets')
-            .select(`
-                *,
-                solicitante:profiles!solicitante_id (
-                    full_name,
-                    email
-                )
-            `)
+            .select('*')
             .order('created_at', { ascending: false });
 
+        // Los usuarios únicamente pueden consultar sus tickets.
         if (req.user.role === 'user') {
             query = query.eq('solicitante_id', req.user.id);
         }
@@ -91,8 +99,16 @@ router.get('/', requireAuth, async (req, res) => {
         const { data: tickets, error } = await query;
 
         if (error) {
-            console.error('Error al consultar tickets:', error);
-            return res.status(500).send('No se pudieron cargar los tickets.');
+            console.error('ERROR AL CONSULTAR TICKETS:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+
+            return res.status(500).send(
+                'No se pudieron cargar los tickets.'
+            );
         }
 
         return res.render(vista, {
@@ -102,8 +118,11 @@ router.get('/', requireAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error en dashboard:', error);
-        return res.status(500).send('Error al cargar el panel.');
+        console.error('ERROR EN DASHBOARD:', error);
+
+        return res.status(500).send(
+            'Error al cargar el panel.'
+        );
     }
 });
 
@@ -112,17 +131,26 @@ router.get('/', requireAuth, async (req, res) => {
 // ============================================
 
 router.get('/nuevo', requireAuth, async (req, res) => {
-    if (req.user.role !== 'user') {
-        return res.status(403).send(
-            'Esta vista de creación está reservada al usuario.'
+    try {
+        if (req.user.role !== 'user') {
+            return res.status(403).send(
+                'Esta vista de creación está reservada al usuario.'
+            );
+        }
+
+        return res.render('usuario/ticket-nuevo', {
+            title: 'Nuevo ticket',
+            user: req.user,
+            error: null
+        });
+
+    } catch (error) {
+        console.error('ERROR AL MOSTRAR NUEVO TICKET:', error);
+
+        return res.status(500).send(
+            'Error al cargar el formulario.'
         );
     }
-
-    return res.render('usuario/ticket-nuevo', {
-        title: 'Nuevo ticket',
-        user: req.user,
-        error: null
-    });
 });
 
 // ============================================
@@ -131,6 +159,12 @@ router.get('/nuevo', requireAuth, async (req, res) => {
 
 router.post('/nuevo', requireAuth, async (req, res) => {
     try {
+        if (req.user.role !== 'user') {
+            return res.status(403).send(
+                'No tienes permiso para crear tickets.'
+            );
+        }
+
         const nombre = limpiar(req.body.nombre_solicitante);
         const titulo = limpiar(req.body.titulo);
         const descripcion = limpiar(req.body.descripcion);
@@ -148,15 +182,21 @@ router.post('/nuevo', requireAuth, async (req, res) => {
             titulo.length > 200 ||
             descripcion.length > 5000
         ) {
-            return res.status(400).send('La longitud de un campo no es válida.');
+            return res.status(400).send(
+                'La longitud de un campo no es válida.'
+            );
         }
 
         const nuevoTicket = {
             nombre_solicitante: nombre,
             titulo,
             descripcion,
-            categoria: CATEGORIAS.includes(categoria) ? categoria : 'general',
-            prioridad: PRIORIDADES.includes(prioridad) ? prioridad : 'media',
+            categoria: CATEGORIAS.includes(categoria)
+                ? categoria
+                : 'general',
+            prioridad: PRIORIDADES.includes(prioridad)
+                ? prioridad
+                : 'media',
             solicitante_id: req.user.id,
             estado: 'pendiente',
             responsable: null
@@ -167,15 +207,21 @@ router.post('/nuevo', requireAuth, async (req, res) => {
             .insert(nuevoTicket);
 
         if (error) {
-            console.error('Error al crear ticket:', error);
-            return res.status(500).send('No se pudo crear el ticket.');
+            console.error('ERROR AL CREAR TICKET:', error);
+
+            return res.status(500).send(
+                'No se pudo crear el ticket.'
+            );
         }
 
         return res.redirect(rutaPanel(req.user.role));
 
     } catch (error) {
-        console.error('Error al crear ticket:', error);
-        return res.status(500).send('Error al crear el ticket.');
+        console.error('ERROR AL CREAR TICKET:', error);
+
+        return res.status(500).send(
+            'Error al crear el ticket.'
+        );
     }
 });
 
@@ -185,34 +231,62 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 
 router.get('/:id', requireAuth, async (req, res) => {
     try {
+        const { id } = req.params;
+
+        // Consultar directamente la tabla tickets.
         const { data: ticket, error } = await req.supabase
             .from('tickets')
-            .select(`
-                *,
-                solicitante:profiles!solicitante_id (
-                    full_name,
-                    email
-                )
-            `)
-            .eq('id', req.params.id)
-            .single();
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
 
-        if (error || !ticket) {
-            return res.status(404).send('Ticket no encontrado.');
+        if (error) {
+            console.error('ERROR SUPABASE - DETALLE:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+
+            return res.status(500).send(
+                'Error al consultar la información del ticket.'
+            );
         }
 
-        const esPropietario = ticket.solicitante_id === req.user.id;
-        const esStaff = ['admin', 'tecnico'].includes(req.user.role);
+        if (!ticket) {
+            return res.status(404).send(
+                'Ticket no encontrado.'
+            );
+        }
+
+        // Comprobar propietario del ticket.
+        const esPropietario =
+            ticket.solicitante_id === req.user.id;
+
+        // Administradores y técnicos pueden consultar todos.
+        const esStaff =
+            ['admin', 'tecnico'].includes(req.user.role);
 
         if (!esPropietario && !esStaff) {
-            return res.status(403).send('No tienes permiso para consultar este ticket.');
+            return res.status(403).send(
+                'No tienes permiso para consultar este ticket.'
+            );
         }
 
+        // Seleccionar plantilla según el rol.
         const vista = vistaDetalle(req.user.role);
 
         if (!vista) {
-            return res.status(403).send('Rol no autorizado.');
+            return res.status(403).send(
+                'Rol no autorizado.'
+            );
         }
+
+        console.log('DETALLE DE TICKET:', {
+            ticketId: ticket.id,
+            role: req.user.role,
+            view: vista
+        });
 
         return res.render(vista, {
             title: `Ticket #${ticket.id}`,
@@ -222,8 +296,11 @@ router.get('/:id', requireAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error al consultar ticket:', error);
-        return res.status(500).send('Error al consultar el ticket.');
+        console.error('ERROR EN GET /tickets/:id:', error);
+
+        return res.status(500).send(
+            'Error al cargar el detalle del ticket.'
+        );
     }
 });
 
@@ -235,28 +312,51 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
     try {
         const { data: ticket, error: findError } = await req.supabase
             .from('tickets')
-            .select('id, solicitante_id, fecha_atencion, fecha_resolucion')
+            .select(`
+                id,
+                solicitante_id,
+                fecha_atencion,
+                fecha_resolucion
+            `)
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
-        if (findError || !ticket) {
-            return res.status(404).send('Ticket no encontrado.');
+        if (findError) {
+            console.error('ERROR AL BUSCAR TICKET PARA ACTUALIZAR:', findError);
+
+            return res.status(500).send(
+                'Error al consultar el ticket.'
+            );
         }
 
-        const esPropietario = ticket.solicitante_id === req.user.id;
-        const esStaff = ['admin', 'tecnico'].includes(req.user.role);
+        if (!ticket) {
+            return res.status(404).send(
+                'Ticket no encontrado.'
+            );
+        }
+
+        const esPropietario =
+            ticket.solicitante_id === req.user.id;
+
+        const esStaff =
+            ['admin', 'tecnico'].includes(req.user.role);
 
         if (!esPropietario && !esStaff) {
-            return res.status(403).send('No tienes permiso para editar este ticket.');
+            return res.status(403).send(
+                'No tienes permiso para editar este ticket.'
+            );
         }
 
+        // Datos básicos.
         const nombre = limpiar(req.body.nombre_solicitante);
         const titulo = limpiar(req.body.titulo);
         const descripcion = limpiar(req.body.descripcion);
         const categoria = limpiar(req.body.categoria);
 
         if (!nombre || !titulo || !descripcion || !categoria) {
-            return res.status(400).send('Completa los campos obligatorios.');
+            return res.status(400).send(
+                'Completa los campos obligatorios.'
+            );
         }
 
         if (
@@ -265,21 +365,31 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             descripcion.length > 5000 ||
             !CATEGORIAS.includes(categoria)
         ) {
-            return res.status(400).send('Los datos ingresados no son válidos.');
+            return res.status(400).send(
+                'Los datos ingresados no son válidos.'
+            );
         }
 
-        // Usuario: solo datos básicos mediante RPC segura.
+        // ========================================
+        // ACTUALIZACIÓN PARA USUARIO
+        // ========================================
+
+        // El usuario solo puede modificar sus datos básicos.
         if (req.user.role === 'user') {
-            const { error } = await req.supabase.rpc('update_own_ticket', {
-                p_ticket_id: ticket.id,
-                p_nombre_solicitante: nombre,
-                p_titulo: titulo,
-                p_descripcion: descripcion,
-                p_categoria: categoria
-            });
+            const { error } = await req.supabase.rpc(
+                'update_own_ticket',
+                {
+                    p_ticket_id: ticket.id,
+                    p_nombre_solicitante: nombre,
+                    p_titulo: titulo,
+                    p_descripcion: descripcion,
+                    p_categoria: categoria
+                }
+            );
 
             if (error) {
-                console.error('Error en update_own_ticket:', error);
+                console.error('ERROR EN update_own_ticket:', error);
+
                 return res.status(500).send(
                     'No se pudieron actualizar los datos del ticket.'
                 );
@@ -288,22 +398,34 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             return res.redirect(`/tickets/${ticket.id}`);
         }
 
-        // Administrador y técnico: datos básicos y gestión.
+        // ========================================
+        // ACTUALIZACIÓN PARA ADMINISTRADOR Y TÉCNICO
+        // ========================================
+
         const estado = limpiar(req.body.estado);
         const prioridad = limpiar(req.body.prioridad);
         const responsable = limpiar(req.body.responsable);
         const observaciones = limpiar(req.body.observaciones);
 
         if (!ESTADOS.includes(estado)) {
-            return res.status(400).send('Estado no válido.');
+            return res.status(400).send(
+                'Estado no válido.'
+            );
         }
 
         if (!PRIORIDADES.includes(prioridad)) {
-            return res.status(400).send('Prioridad no válida.');
+            return res.status(400).send(
+                'Prioridad no válida.'
+            );
         }
 
-        if (responsable.length > 150 || observaciones.length > 5000) {
-            return res.status(400).send('Los campos de gestión son demasiado largos.');
+        if (
+            responsable.length > 150 ||
+            observaciones.length > 5000
+        ) {
+            return res.status(400).send(
+                'Los campos de gestión son demasiado largos.'
+            );
         }
 
         const ahora = new Date().toISOString();
@@ -320,11 +442,19 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             updated_at: ahora
         };
 
-        if (estado === 'en_proceso' && !ticket.fecha_atencion) {
+        // Registrar primera fecha de atención.
+        if (
+            estado === 'en_proceso' &&
+            !ticket.fecha_atencion
+        ) {
             actualizacion.fecha_atencion = ahora;
         }
 
-        if (estado === 'resuelto' && !ticket.fecha_resolucion) {
+        // Registrar primera fecha de resolución.
+        if (
+            estado === 'resuelto' &&
+            !ticket.fecha_resolucion
+        ) {
             actualizacion.fecha_resolucion = ahora;
         }
 
@@ -334,15 +464,21 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             .eq('id', ticket.id);
 
         if (error) {
-            console.error('Error al actualizar ticket:', error);
-            return res.status(500).send('No se pudo actualizar el ticket.');
+            console.error('ERROR AL ACTUALIZAR TICKET:', error);
+
+            return res.status(500).send(
+                'No se pudo actualizar el ticket.'
+            );
         }
 
         return res.redirect(`/tickets/${ticket.id}`);
 
     } catch (error) {
-        console.error('Error al actualizar ticket:', error);
-        return res.status(500).send('Error al actualizar el ticket.');
+        console.error('ERROR EN ACTUALIZACIÓN DE TICKET:', error);
+
+        return res.status(500).send(
+            'Error al actualizar el ticket.'
+        );
     }
 });
 
@@ -350,35 +486,59 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
 // 6. ELIMINAR TICKET: SOLO ADMINISTRADOR
 // ============================================
 
-router.post('/:id/eliminar', requireAuth, requireOnlyAdmin, async (req, res) => {
-    try {
-        const { data: ticket, error: findError } = await req.supabase
-            .from('tickets')
-            .select('id')
-            .eq('id', req.params.id)
-            .single();
+router.post(
+    '/:id/eliminar',
+    requireAuth,
+    requireOnlyAdmin,
+    async (req, res) => {
+        try {
+            const { data: ticket, error: findError } = await req.supabase
+                .from('tickets')
+                .select('id')
+                .eq('id', req.params.id)
+                .maybeSingle();
 
-        if (findError || !ticket) {
-            return res.status(404).send('Ticket no encontrado.');
+            if (findError) {
+                console.error('ERROR AL BUSCAR TICKET PARA ELIMINAR:', findError);
+
+                return res.status(500).send(
+                    'Error al consultar el ticket.'
+                );
+            }
+
+            if (!ticket) {
+                return res.status(404).send(
+                    'Ticket no encontrado.'
+                );
+            }
+
+            const { error } = await req.supabase
+                .from('tickets')
+                .delete()
+                .eq('id', ticket.id);
+
+            if (error) {
+                console.error('ERROR AL ELIMINAR TICKET:', error);
+
+                return res.status(500).send(
+                    'No se pudo eliminar el ticket.'
+                );
+            }
+
+            return res.redirect(rutaPanel(req.user.role));
+
+        } catch (error) {
+            console.error('ERROR EN ELIMINADO DE TICKET:', error);
+
+            return res.status(500).send(
+                'Error al eliminar el ticket.'
+            );
         }
-
-        const { error } = await req.supabase
-            .from('tickets')
-            .delete()
-            .eq('id', ticket.id);
-
-        if (error) {
-            console.error('Error al eliminar ticket:', error);
-            return res.status(500).send('No se pudo eliminar el ticket.');
-        }
-
-        // Regresa al panel correspondiente a la sesión autenticada.
-        return res.redirect(rutaPanel(req.user.role));
-
-    } catch (error) {
-        console.error('Error al eliminar ticket:', error);
-        return res.status(500).send('Error al eliminar el ticket.');
     }
-});
+);
+
+// ============================================
+// EXPORTAR ROUTER
+// ============================================
 
 module.exports = router;
