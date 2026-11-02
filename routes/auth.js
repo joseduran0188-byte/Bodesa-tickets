@@ -8,7 +8,6 @@ const supabase = createClient(
     process.env.SUPABASE_ANON_KEY
 );
 
-// Configuración de la cookie de autenticación
 const cookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -16,7 +15,6 @@ const cookieOptions = {
     path: '/'
 };
 
-// Mostrar formulario de inicio de sesión
 router.get('/login', (req, res) => {
     res.render('login', {
         title: 'Iniciar sesión',
@@ -24,10 +22,15 @@ router.get('/login', (req, res) => {
     });
 });
 
-// Iniciar sesión
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = typeof req.body.email === 'string'
+            ? req.body.email.trim().toLowerCase()
+            : '';
+
+        const password = typeof req.body.password === 'string'
+            ? req.body.password
+            : '';
 
         if (!email || !password) {
             return res.status(400).render('login', {
@@ -37,7 +40,7 @@ router.post('/login', async (req, res) => {
         }
 
         const { data, error } = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
+            email,
             password
         });
 
@@ -48,23 +51,25 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Verificar que exista un perfil asociado a la cuenta
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('id, role')
             .eq('id', data.user.id)
             .single();
 
-        if (profileError || !profile) {
+        if (
+            profileError ||
+            !profile ||
+            !['admin', 'tecnico', 'user'].includes(profile.role)
+        ) {
             await supabase.auth.signOut();
 
             return res.status(403).render('login', {
                 title: 'Iniciar sesión',
-                error: 'La cuenta no tiene un perfil registrado.'
+                error: 'La cuenta no tiene un perfil o rol válido.'
             });
         }
 
-        // Guardar token de acceso en una cookie segura
         res.cookie(
             'sb-access-token',
             data.session.access_token,
@@ -74,6 +79,8 @@ router.post('/login', async (req, res) => {
             }
         );
 
+        // Los tres roles llegan al enrutador central.
+        // Este selecciona el panel de acuerdo con el perfil real.
         return res.redirect('/tickets');
 
     } catch (error) {
@@ -86,7 +93,6 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// Cerrar sesión
 router.post('/logout', async (req, res) => {
     try {
         const token = req.cookies?.['sb-access-token'];
@@ -111,24 +117,17 @@ router.post('/logout', async (req, res) => {
             const { error } = await supabaseUser.auth.signOut();
 
             if (error) {
-                console.error(
-                    'Error al cerrar sesión en Supabase:',
-                    error.message
-                );
+                console.error('Error al cerrar sesión:', error.message);
             }
         }
 
-        // Eliminar cookie del navegador
         res.clearCookie('sb-access-token', cookieOptions);
-
         return res.redirect('/login');
 
     } catch (error) {
         console.error('Error en logout:', error);
 
-        // Aunque falle Supabase, eliminar la cookie local
         res.clearCookie('sb-access-token', cookieOptions);
-
         return res.redirect('/login');
     }
 });

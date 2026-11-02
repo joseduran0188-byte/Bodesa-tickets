@@ -1,0 +1,80 @@
+
+extends ../layout
+
+block content
+    .container
+        .page-header
+            div
+                h1 Mis solicitudes
+                p Bienvenido, #{user.full_name || user.email}
+
+                p
+                    strong Tipo de cuenta:
+                    |  Usuario
+
+            a.btn.btn-primary(href='/tickets/nuevo')
+                i.fa-solid.fa-plus
+                |  Nuevo ticket
+
+        if tickets && tickets.length
+            .tickets-table-wrapper
+                table.tickets-table
+                    thead
+                        tr
+                            th Folio
+                            th Solicitud
+                            th Prioridad
+                            th Estado
+                            th Responsable
+                            th Fecha
+                            th.actions-heading Acciones
+
+                    tbody
+                        each ticket in tickets
+                            tr
+                                td= ticket.id
+                                td.ticket-title= ticket.titulo
+
+                                td
+                                    - const prioridad = (ticket.prioridad || 'media').toLowerCase()
+                                    - const prioridadClase = prioridad === 'urgente' ? 'alta' : prioridad
+                                    span(class='badge badge-' + prioridadClase)
+                                        = prioridad.charAt(0).toUpperCase() + prioridad.slice(1)
+
+                                td
+                                    - const estado = (ticket.estado || 'pendiente').toLowerCase()
+                                    - const estadoClase = estado === 'cancelado' ? 'cerrado' : estado
+                                    span(class='badge badge-estado-' + estadoClase)
+                                        = estado === 'en_proceso' ? 'En proceso' : estado.charAt(0).toUpperCase() + estado.slice(1)
+
+                                td.responsable-column
+                                    = ticket.responsable || 'Sin asignar'
+
+                                td.ticket-date
+                                    = ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('es-MX') : '—'
+
+                                td.actions
+                                    .action-buttons
+                                        a.action-btn.action-view(
+                                            href='/tickets/' + ticket.id
+                                            title='Ver ticket'
+                                        )
+                                            i.fa-solid.fa-eye
+                                            span Ver
+
+                                        a.action-btn.action-edit(
+                                            href='/tickets/' + ticket.id + '?editar=1'
+                                            title='Editar ticket'
+                                        )
+                                            i.fa-solid.fa-pen-to-square
+                                            span Editar
+
+        else
+            .empty-state
+                i.fa-solid.fa-clipboard-list
+                h3 No hay tickets registrados
+                p Cuando registres una solicitud, aparecerá aquí.
+
+                a.btn.btn-primary(href='/tickets/nuevo')
+                    i.fa-solid.fa-plus
+                    |  Crear primer ticket

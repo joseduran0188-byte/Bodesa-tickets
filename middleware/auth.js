@@ -18,7 +18,6 @@ function getSupabase(token) {
     });
 }
 
-// Verificar sesión y obtener el rol real desde Supabase
 async function requireAuth(req, res, next) {
     try {
         const token = req.cookies?.['sb-access-token'];
@@ -46,16 +45,16 @@ async function requireAuth(req, res, next) {
             .single();
 
         if (profileError || !profile) {
+            console.error('Error al consultar perfil:', profileError);
             return res.status(403).send(
                 'No se encontró el perfil del usuario.'
             );
         }
 
-        // No confiar en roles enviados desde el navegador.
-        const rolesPermitidos = ['user', 'admin', 'tecnico'];
+        const rolesPermitidos = ['admin', 'tecnico', 'user'];
 
         if (!rolesPermitidos.includes(profile.role)) {
-            return res.status(403).send('El rol de usuario no es válido.');
+            return res.status(403).send('Rol no autorizado.');
         }
 
         req.supabase = supabase;
@@ -70,6 +69,12 @@ async function requireAuth(req, res, next) {
 
         res.locals.user = req.user;
 
+        console.log('Sesión verificada:', {
+            email: req.user.email,
+            role: req.user.role,
+            url: req.originalUrl
+        });
+
         return next();
 
     } catch (error) {
@@ -78,12 +83,38 @@ async function requireAuth(req, res, next) {
     }
 }
 
-// Administrador y técnico pueden gestionar tickets.
+function requireAdmin(req, res, next) {
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).send(
+            'Esta sección es exclusiva del administrador.'
+        );
+    }
+
+    return next();
+}
+
+function requireTechnician(req, res, next) {
+    if (!req.user || req.user.role !== 'tecnico') {
+        return res.status(403).send(
+            'Esta sección es exclusiva del técnico.'
+        );
+    }
+
+    return next();
+}
+
+function requireUser(req, res, next) {
+    if (!req.user || req.user.role !== 'user') {
+        return res.status(403).send(
+            'Esta sección es exclusiva del usuario.'
+        );
+    }
+
+    return next();
+}
+
 function requireStaff(req, res, next) {
-    if (
-        !req.user ||
-        !['admin', 'tecnico'].includes(req.user.role)
-    ) {
+    if (!req.user || !['admin', 'tecnico'].includes(req.user.role)) {
         return res.status(403).send(
             'No tienes permisos para realizar esta acción.'
         );
@@ -92,19 +123,15 @@ function requireStaff(req, res, next) {
     return next();
 }
 
-// Exclusivo para administrador.
 function requireOnlyAdmin(req, res, next) {
-    if (!req.user || req.user.role !== 'admin') {
-        return res.status(403).send(
-            'Esta acción es exclusiva del administrador.'
-        );
-    }
-
-    return next();
+    return requireAdmin(req, res, next);
 }
 
 module.exports = {
     requireAuth,
+    requireAdmin,
+    requireTechnician,
+    requireUser,
     requireStaff,
     requireOnlyAdmin
 };

@@ -1,0 +1,65 @@
+
+extends ../layout
+
+block content
+  .page-header
+    h2= `Atención del ticket #${ticket.id.substring(0, 8)}`
+    a.btn.btn-secondary(href="/tickets")
+      i.fa-solid.fa-arrow-left
+      |  Volver al panel
+
+  .detail-card
+    h3 Datos de la solicitud
+    p
+      strong Solicitante:
+      |  #{ticket.nombre_solicitante || '—'}
+    p
+      strong Título:
+      |  #{ticket.titulo}
+    p
+      strong Categoría:
+      |  #{ticket.categoria || '—'}
+    p
+      strong Descripción:
+    p.descripcion= ticket.descripcion
+
+  .form-card
+    h3 Actualizar atención técnica
+
+    form(method="POST" action=`/tickets/${ticket.id}/actualizar`)
+      input(type="hidden" name="nombre_solicitante" value=ticket.nombre_solicitante || '')
+      input(type="hidden" name="titulo" value=ticket.titulo)
+      input(type="hidden" name="descripcion" value=ticket.descripcion)
+      input(type="hidden" name="categoria" value=ticket.categoria || 'general')
+
+      .form-row
+        .form-group
+          label(for="estado") Estado
+          select#estado(name="estado" required)
+            option(value="pendiente" selected=ticket.estado === 'pendiente') Pendiente
+            option(value="en_proceso" selected=ticket.estado === 'en_proceso') En proceso
+            option(value="resuelto" selected=ticket.estado === 'resuelto') Resuelto
+            option(value="cancelado" selected=ticket.estado === 'cancelado') Cancelado
+
+        .form-group
+          label(for="prioridad") Prioridad
+          select#prioridad(name="prioridad" required)
+            option(value="baja" selected=ticket.prioridad === 'baja') Baja
+            option(value="media" selected=ticket.prioridad === 'media') Media
+            option(value="alta" selected=ticket.prioridad === 'alta') Alta
+            option(value="urgente" selected=ticket.prioridad === 'urgente') Urgente
+
+      .form-group
+        label(for="responsable") Responsable
+        input#responsable(type="text" name="responsable" maxlength="150" value=ticket.responsable || '')
+
+      .form-group
+        label(for="observaciones") Observaciones técnicas
+        textarea#observaciones(name="observaciones" rows="5" maxlength="5000")= ticket.observaciones || ''
+
+      .form-actions
+        button.btn.btn-primary(type="submit")
+          i.fa-solid.fa-floppy-disk
+          |  Guardar atención
+        a.btn.btn-secondary(href="/tickets")
+          | Cancelar

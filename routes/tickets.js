@@ -18,35 +18,61 @@ const CATEGORIAS = [
     'otro'
 ];
 
-const PRIORIDADES = [
-    'baja',
-    'media',
-    'alta',
-    'urgente'
-];
+const PRIORIDADES = ['baja', 'media', 'alta', 'urgente'];
 
 const ESTADOS = [
     'pendiente',
     'en_proceso',
     'resuelto',
-    'cancelado',
-    'cerrado'
+    'cancelado'
 ];
 
-function limpiarTexto(valor) {
+function limpiar(valor) {
     return typeof valor === 'string' ? valor.trim() : '';
 }
 
-function esPersonal(role) {
-    return ['admin', 'tecnico'].includes(role);
+function rutaPanel(role) {
+    const rutas = {
+        admin: '/tickets',
+        tecnico: '/tickets',
+        user: '/tickets'
+    };
+
+    return rutas[role] || '/login';
+}
+
+function vistaDashboard(role) {
+    const vistas = {
+        admin: 'admin/dashboard',
+        tecnico: 'tecnico/dashboard',
+        user: 'usuario/dashboard'
+    };
+
+    return vistas[role] || null;
+}
+
+function vistaDetalle(role) {
+    const vistas = {
+        admin: 'admin/ticket-detalle',
+        tecnico: 'tecnico/ticket-detalle',
+        user: 'usuario/ticket-detalle'
+    };
+
+    return vistas[role] || null;
 }
 
 // ============================================
-// 1. LISTADO DE TICKETS
+// 1. DASHBOARD INDEPENDIENTE POR ROL
 // ============================================
 
 router.get('/', requireAuth, async (req, res) => {
     try {
+        const vista = vistaDashboard(req.user.role);
+
+        if (!vista) {
+            return res.status(403).send('Rol no autorizado.');
+        }
+
         let query = req.supabase
             .from('tickets')
             .select(`
@@ -69,13 +95,14 @@ router.get('/', requireAuth, async (req, res) => {
             return res.status(500).send('No se pudieron cargar los tickets.');
         }
 
-        return res.render('dashboard', {
+        return res.render(vista, {
             title: 'Panel de tickets',
             user: req.user,
             tickets: tickets || []
         });
+
     } catch (error) {
-        console.error('Error en listado:', error);
+        console.error('Error en dashboard:', error);
         return res.status(500).send('Error al cargar el panel.');
     }
 });
@@ -84,8 +111,14 @@ router.get('/', requireAuth, async (req, res) => {
 // 2. FORMULARIO DE NUEVO TICKET
 // ============================================
 
-router.get('/nuevo', requireAuth, (req, res) => {
-    return res.render('ticket-nuevo', {
+router.get('/nuevo', requireAuth, async (req, res) => {
+    if (req.user.role !== 'user') {
+        return res.status(403).send(
+            'Esta vista de creación está reservada al usuario.'
+        );
+    }
+
+    return res.render('usuario/ticket-nuevo', {
         title: 'Nuevo ticket',
         user: req.user,
         error: null
@@ -98,26 +131,24 @@ router.get('/nuevo', requireAuth, (req, res) => {
 
 router.post('/nuevo', requireAuth, async (req, res) => {
     try {
-        const nombre = limpiarTexto(req.body.nombre_solicitante);
-        const titulo = limpiarTexto(req.body.titulo);
-        const descripcion = limpiarTexto(req.body.descripcion);
-        const categoria = limpiarTexto(req.body.categoria);
-        const prioridad = limpiarTexto(req.body.prioridad);
+        const nombre = limpiar(req.body.nombre_solicitante);
+        const titulo = limpiar(req.body.titulo);
+        const descripcion = limpiar(req.body.descripcion);
+        const categoria = limpiar(req.body.categoria);
+        const prioridad = limpiar(req.body.prioridad);
 
         if (!nombre || !titulo || !descripcion) {
-            return res.status(400).render('ticket-nuevo', {
-                title: 'Nuevo ticket',
-                user: req.user,
-                error: 'Completa el nombre del solicitante, título y descripción.'
-            });
+            return res.status(400).send(
+                'Completa el nombre del solicitante, título y descripción.'
+            );
         }
 
-        if (nombre.length > 150 || titulo.length > 200 || descripcion.length > 5000) {
-            return res.status(400).render('ticket-nuevo', {
-                title: 'Nuevo ticket',
-                user: req.user,
-                error: 'Verifica la longitud de los campos ingresados.'
-            });
+        if (
+            nombre.length > 150 ||
+            titulo.length > 200 ||
+            descripcion.length > 5000
+        ) {
+            return res.status(400).send('La longitud de un campo no es válida.');
         }
 
         const nuevoTicket = {
@@ -137,14 +168,11 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 
         if (error) {
             console.error('Error al crear ticket:', error);
-            return res.status(500).render('ticket-nuevo', {
-                title: 'Nuevo ticket',
-                user: req.user,
-                error: 'No se pudo registrar el ticket.'
-            });
+            return res.status(500).send('No se pudo crear el ticket.');
         }
 
-        return res.redirect('/tickets');
+        return res.redirect(rutaPanel(req.user.role));
+
     } catch (error) {
         console.error('Error al crear ticket:', error);
         return res.status(500).send('Error al crear el ticket.');
@@ -152,7 +180,7 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 });
 
 // ============================================
-// 4. DETALLE DE TICKET
+// 4. DETALLE DE TICKET SEGÚN ROL
 // ============================================
 
 router.get('/:id', requireAuth, async (req, res) => {
@@ -173,21 +201,26 @@ router.get('/:id', requireAuth, async (req, res) => {
             return res.status(404).send('Ticket no encontrado.');
         }
 
-        if (
-            req.user.role === 'user' &&
-            ticket.solicitante_id !== req.user.id
-        ) {
-            return res.status(403).send(
-                'No tienes permiso para consultar este ticket.'
-            );
+        const esPropietario = ticket.solicitante_id === req.user.id;
+        const esStaff = ['admin', 'tecnico'].includes(req.user.role);
+
+        if (!esPropietario && !esStaff) {
+            return res.status(403).send('No tienes permiso para consultar este ticket.');
         }
 
-        return res.render('ticket-detalle', {
+        const vista = vistaDetalle(req.user.role);
+
+        if (!vista) {
+            return res.status(403).send('Rol no autorizado.');
+        }
+
+        return res.render(vista, {
             title: `Ticket #${ticket.id}`,
             user: req.user,
             ticket,
             editarTicket: req.query.editar === '1'
         });
+
     } catch (error) {
         console.error('Error al consultar ticket:', error);
         return res.status(500).send('Error al consultar el ticket.');
@@ -195,16 +228,14 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // ============================================
-// 5. EDITAR TICKET COMPLETO
-// Usuario: datos básicos de su propio ticket.
-// Admin/técnico: datos básicos y gestión.
+// 5. ACTUALIZAR TICKET
 // ============================================
 
 router.post('/:id/actualizar', requireAuth, async (req, res) => {
     try {
         const { data: ticket, error: findError } = await req.supabase
             .from('tickets')
-            .select('id, solicitante_id, estado, fecha_atencion, fecha_resolucion')
+            .select('id, solicitante_id, fecha_atencion, fecha_resolucion')
             .eq('id', req.params.id)
             .single();
 
@@ -213,24 +244,19 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
         }
 
         const esPropietario = ticket.solicitante_id === req.user.id;
-        const esStaff = esPersonal(req.user.role);
+        const esStaff = ['admin', 'tecnico'].includes(req.user.role);
 
         if (!esPropietario && !esStaff) {
-            return res.status(403).send(
-                'No tienes permiso para editar este ticket.'
-            );
+            return res.status(403).send('No tienes permiso para editar este ticket.');
         }
 
-        // Datos básicos que pueden editar el propietario y el personal.
-        const nombre = limpiarTexto(req.body.nombre_solicitante);
-        const titulo = limpiarTexto(req.body.titulo);
-        const descripcion = limpiarTexto(req.body.descripcion);
-        const categoria = limpiarTexto(req.body.categoria);
+        const nombre = limpiar(req.body.nombre_solicitante);
+        const titulo = limpiar(req.body.titulo);
+        const descripcion = limpiar(req.body.descripcion);
+        const categoria = limpiar(req.body.categoria);
 
         if (!nombre || !titulo || !descripcion || !categoria) {
-            return res.status(400).send(
-                'Completa todos los campos obligatorios.'
-            );
+            return res.status(400).send('Completa los campos obligatorios.');
         }
 
         if (
@@ -239,13 +265,10 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             descripcion.length > 5000 ||
             !CATEGORIAS.includes(categoria)
         ) {
-            return res.status(400).send(
-                'Uno o más campos contienen valores no válidos.'
-            );
+            return res.status(400).send('Los datos ingresados no son válidos.');
         }
 
-        // Usuario normal: solo puede modificar los datos básicos.
-        // La función SQL verifica nuevamente que sea el propietario.
+        // Usuario: solo datos básicos mediante RPC segura.
         if (req.user.role === 'user') {
             const { error } = await req.supabase.rpc('update_own_ticket', {
                 p_ticket_id: ticket.id,
@@ -256,20 +279,20 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             });
 
             if (error) {
-                console.error('Error en RPC update_own_ticket:', error);
+                console.error('Error en update_own_ticket:', error);
                 return res.status(500).send(
-                    'No se pudieron actualizar los datos del ticket. Verifica que la función update_own_ticket exista en Supabase.'
+                    'No se pudieron actualizar los datos del ticket.'
                 );
             }
 
             return res.redirect(`/tickets/${ticket.id}`);
         }
 
-        // Administrador y técnico: pueden modificar todos los campos.
-        const estado = limpiarTexto(req.body.estado);
-        const prioridad = limpiarTexto(req.body.prioridad);
-        const responsable = limpiarTexto(req.body.responsable);
-        const observaciones = limpiarTexto(req.body.observaciones);
+        // Administrador y técnico: datos básicos y gestión.
+        const estado = limpiar(req.body.estado);
+        const prioridad = limpiar(req.body.prioridad);
+        const responsable = limpiar(req.body.responsable);
+        const observaciones = limpiar(req.body.observaciones);
 
         if (!ESTADOS.includes(estado)) {
             return res.status(400).send('Estado no válido.');
@@ -280,9 +303,7 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
         }
 
         if (responsable.length > 150 || observaciones.length > 5000) {
-            return res.status(400).send(
-                'El responsable o las observaciones superan la longitud permitida.'
-            );
+            return res.status(400).send('Los campos de gestión son demasiado largos.');
         }
 
         const ahora = new Date().toISOString();
@@ -299,35 +320,26 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             updated_at: ahora
         };
 
-        // Registrar la primera fecha de atención, sin sobrescribirla.
-        if (
-            estado === 'en_proceso' &&
-            !ticket.fecha_atencion
-        ) {
+        if (estado === 'en_proceso' && !ticket.fecha_atencion) {
             actualizacion.fecha_atencion = ahora;
         }
 
-        // Registrar la primera fecha de resolución, sin sobrescribirla.
-        if (
-            estado === 'resuelto' &&
-            !ticket.fecha_resolucion
-        ) {
+        if (estado === 'resuelto' && !ticket.fecha_resolucion) {
             actualizacion.fecha_resolucion = ahora;
         }
 
-        const { error: updateError } = await req.supabase
+        const { error } = await req.supabase
             .from('tickets')
             .update(actualizacion)
             .eq('id', ticket.id);
 
-        if (updateError) {
-            console.error('Error al actualizar ticket:', updateError);
-            return res.status(500).send(
-                'No se pudo actualizar el ticket. Revisa los permisos de Supabase.'
-            );
+        if (error) {
+            console.error('Error al actualizar ticket:', error);
+            return res.status(500).send('No se pudo actualizar el ticket.');
         }
 
         return res.redirect(`/tickets/${ticket.id}`);
+
     } catch (error) {
         console.error('Error al actualizar ticket:', error);
         return res.status(500).send('Error al actualizar el ticket.');
@@ -335,74 +347,7 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
 });
 
 // ============================================
-// 6. RUTA ANTERIOR DE EDICIÓN DE DESCRIPCIÓN
-// Se conserva para no romper formularios antiguos.
-// ============================================
-
-router.post('/:id/editar-descripcion', requireAuth, async (req, res) => {
-    try {
-        const descripcion = limpiarTexto(req.body.descripcion);
-
-        if (!descripcion || descripcion.length > 5000) {
-            return res.status(400).send('La descripción no es válida.');
-        }
-
-        const { data: ticket, error: findError } = await req.supabase
-            .from('tickets')
-            .select('id, solicitante_id')
-            .eq('id', req.params.id)
-            .single();
-
-        if (findError || !ticket) {
-            return res.status(404).send('Ticket no encontrado.');
-        }
-
-        const esPropietario = ticket.solicitante_id === req.user.id;
-        const esStaff = esPersonal(req.user.role);
-
-        if (!esPropietario && !esStaff) {
-            return res.status(403).send('No tienes permiso para editar este ticket.');
-        }
-
-        let error;
-
-        if (req.user.role === 'user') {
-            const result = await req.supabase.rpc('update_own_ticket', {
-                p_ticket_id: ticket.id,
-                p_nombre_solicitante: '',
-                p_titulo: '',
-                p_descripcion: descripcion,
-                p_categoria: ''
-            });
-
-            error = result.error;
-        } else {
-            const result = await req.supabase
-                .from('tickets')
-                .update({
-                    descripcion,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', ticket.id);
-
-            error = result.error;
-        }
-
-        if (error) {
-            console.error('Error al editar descripción:', error);
-            return res.status(500).send('No se pudo actualizar la descripción.');
-        }
-
-        return res.redirect(`/tickets/${ticket.id}`);
-    } catch (error) {
-        console.error('Error al editar descripción:', error);
-        return res.status(500).send('Error al editar el ticket.');
-    }
-});
-
-// ============================================
-// 7. ELIMINAR TICKET
-// Exclusivo para administrador.
+// 6. ELIMINAR TICKET: SOLO ADMINISTRADOR
 // ============================================
 
 router.post('/:id/eliminar', requireAuth, requireOnlyAdmin, async (req, res) => {
@@ -427,7 +372,9 @@ router.post('/:id/eliminar', requireAuth, requireOnlyAdmin, async (req, res) => 
             return res.status(500).send('No se pudo eliminar el ticket.');
         }
 
-        return res.redirect('/tickets');
+        // Regresa al panel correspondiente a la sesión autenticada.
+        return res.redirect(rutaPanel(req.user.role));
+
     } catch (error) {
         console.error('Error al eliminar ticket:', error);
         return res.status(500).send('Error al eliminar el ticket.');

@@ -1,21 +1,16 @@
 
-extends layout
+extends ../layout
 
 block content
     .container
         .page-header
             div
-                h1 Panel de tickets
+                h1 Panel de administración
                 p Bienvenido, #{user.full_name || user.email}
 
                 p
                     strong Tipo de cuenta:
-                    if user.role === 'admin'
-                        |  Administrador
-                    else if user.role === 'tecnico'
-                        |  Técnico de TI
-                    else
-                        |  Usuario
+                    |  Administrador
 
             a.btn.btn-primary(href='/tickets/nuevo')
                 i.fa-solid.fa-plus
@@ -39,9 +34,7 @@ block content
                         each ticket in tickets
                             tr
                                 td= ticket.id
-
                                 td.ticket-title= ticket.titulo
-
                                 td= ticket.nombre_solicitante || 'Sin nombre registrado'
 
                                 td
@@ -64,7 +57,6 @@ block content
 
                                 td.actions
                                     .action-buttons
-                                        //- Ver ticket: disponible para todos
                                         a.action-btn.action-view(
                                             href='/tickets/' + ticket.id
                                             title='Ver ticket'
@@ -72,28 +64,24 @@ block content
                                             i.fa-solid.fa-eye
                                             span Ver
 
-                                        //- Editar: personal propio, técnicos y administradores
-                                        if user.role === 'admin' || user.role === 'tecnico' || ticket.solicitante_id === user.id
-                                            a.action-btn.action-edit(
-                                                href='/tickets/' + ticket.id + '?editar=1'
-                                                title='Editar ticket'
-                                            )
-                                                i.fa-solid.fa-pen-to-square
-                                                span Editar
+                                        a.action-btn.action-edit(
+                                            href='/tickets/' + ticket.id + '?editar=1'
+                                            title='Editar ticket'
+                                        )
+                                            i.fa-solid.fa-pen-to-square
+                                            span Editar
 
-                                        //- Eliminar: exclusivo del administrador
-                                        if user.role === 'admin'
-                                            form.action-form(
-                                                action='/tickets/' + ticket.id + '/eliminar'
-                                                method='POST'
-                                                onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
+                                        form.action-form(
+                                            action='/tickets/' + ticket.id + '/eliminar'
+                                            method='POST'
+                                            onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
+                                        )
+                                            button.action-btn.action-delete(
+                                                type='submit'
+                                                title='Eliminar ticket'
                                             )
-                                                button.action-btn.action-delete(
-                                                    type='submit'
-                                                    title='Eliminar ticket'
-                                                )
-                                                    i.fa-solid.fa-trash-can
-                                                    span Eliminar
+                                                i.fa-solid.fa-trash-can
+                                                span Eliminar
 
         else
             .empty-state
