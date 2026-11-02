@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const express = require('express');
@@ -11,19 +10,18 @@ const adminRoutes = require('./routes/admin');
 const tecnicoRoutes = require('./routes/tecnico');
 const usuarioRoutes = require('./routes/usuario');
 
-const app = express();
+const {
+    requireAuth,
+    requireAdmin,
+    requireTechnician,
+    requireUser
+} = require('./middleware/auth');
 
-// ========================================
-// CONFIGURACIÓN GENERAL
-// ========================================
+const app = express();
 
 app.set('trust proxy', 1);
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
-
-// ========================================
-// MIDDLEWARES
-// ========================================
 
 app.use(helmet({
     contentSecurityPolicy: false
@@ -33,80 +31,59 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Evitar caché de páginas privadas.
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use((req, res, next) => {
-    res.setHeader(
-        'Cache-Control',
-        'no-store, no-cache, must-revalidate, private'
-    );
-
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
+    res.setHeader('Cache-Control', 'no-store, private');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     next();
 });
 
-// Archivos estáticos.
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ========================================
-// AUTENTICACIÓN
-// ========================================
-
 app.use('/', authRoutes);
 
-// ========================================
-// MÓDULOS INDEPENDIENTES POR ROL
-// ========================================
+// Las rutas de cada rol deben estar protegidas por el contexto de pestaña.
+app.use(
+    '/sesion/:sessionToken/admin/tickets',
+    requireAuth,
+    requireAdmin,
+    adminRoutes
+);
 
-// Administrador
-app.use('/admin/tickets', adminRoutes);
+app.use(
+    '/sesion/:sessionToken/tecnico/tickets',
+    requireAuth,
+    requireTechnician,
+    tecnicoRoutes
+);
 
-// Técnico
-app.use('/tecnico/tickets', tecnicoRoutes);
-
-// Usuario
-app.use('/usuario/tickets', usuarioRoutes);
-
-// ========================================
-// RUTA PRINCIPAL
-// ========================================
+app.use(
+    '/sesion/:sessionToken/usuario/tickets',
+    requireAuth,
+    requireUser,
+    usuarioRoutes
+);
 
 app.get('/', (req, res) => {
     res.redirect('/login');
 });
 
-// ========================================
-// PÁGINA NO ENCONTRADA
-// ========================================
-
 app.use((req, res) => {
-    res.status(404).send('Página no encontrada.');
+    res.status(404).render('404', {
+        mensaje: 'Página no encontrada'
+    });
 });
 
-// ========================================
-// MANEJO GENERAL DE ERRORES
-// ========================================
+app.use((error, req, res, next) => {
+    console.error('Error general:', error);
 
-app.use((err, req, res, next) => {
-    console.error('ERROR GENERAL:', err);
-
-    res.status(500).send(
-        'Ocurrió un error interno.'
-    );
+    res.status(500).send('Ocurrió un error interno del servidor.');
 });
-
-// ========================================
-// INICIAR SERVIDOR
-// ========================================
 
 if (require.main === module) {
     const PORT = process.env.PORT || 3000;
 
     app.listen(PORT, () => {
-        console.log(
-            `Servidor iniciado en el puerto ${PORT}`
-        );
+        console.log(`Servidor iniciado en puerto ${PORT}`);
     });
 }
 

@@ -1,53 +1,48 @@
-
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-
-function crearSupabase(token) {
-    return createClient(
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY,
-        {
-            global: {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            },
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false,
-                detectSessionInUrl: false
-            }
-        }
-    );
-}
-
-// ========================================
-// VERIFICAR SESIÓN Y CARGAR PERFIL
-// ========================================
+const {
+    getTabSession,
+    updateActivity
+} = require('../lib/session-manager');
 
 async function requireAuth(req, res, next) {
     try {
-        const token = req.cookies?.['sb-access-token'];
+        const sessionToken = req.params.sessionToken;
 
-        if (!token) {
+        if (!sessionToken) {
             return res.redirect('/login');
         }
 
-        const supabase = crearSupabase(token);
+        const tabSession = await getTabSession(sessionToken);
+
+        if (!tabSession) {
+            return res.redirect('/login?expired=1');
+        }
+
+        const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_ANON_KEY,
+            {
+                global: {
+                    headers: {
+                        Authorization: `Bearer ${tabSession.accessToken}`
+                    }
+                },
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false,
+                    detectSessionInUrl: false
+                }
+            }
+        );
 
         const {
             data: { user },
-            error: authError
-        } = await supabase.auth.getUser(token);
+            error: userError
+        } = await supabase.auth.getUser();
 
-        if (authError || !user) {
-            res.clearCookie('sb-access-token', {
-                path: '/'
-            });
-
-            return res.redirect('/login');
+        if (userError || !user || user.id !== tabSession.userId) {
+            return res.redirect('/login?expired=1');
         }
 
         const { data: profile, error: profileError } = await supabase
@@ -56,116 +51,54 @@ async function requireAuth(req, res, next) {
             .eq('id', user.id)
             .single();
 
-        if (profileError || !profile) {
-            console.error('ERROR AL CONSULTAR PERFIL:', profileError);
-
-            return res.status(403).send(
-                'No se encontró el perfil del usuario.'
-            );
+        if (profileError || !profile || profile.role !== tabSession.role) {
+            return res.status(403).send('No tienes autorización para acceder.');
         }
 
-        const rolesPermitidos = ['admin', 'tecnico', 'user'];
-
-        if (!rolesPermitidos.includes(profile.role)) {
-            return res.status(403).send('Rol no autorizado.');
-        }
-
-        // Guardar cliente autenticado para las consultas.
+        req.tabSession = tabSession;
+        req.sessionToken = sessionToken;
         req.supabase = supabase;
-
-        // Guardar información del usuario en la solicitud.
         req.user = {
-            id: user.id,
-            email: user.email,
-            full_name: profile.full_name || '',
-            role: profile.role,
-            departamento: profile.departamento || ''
+            ...user,
+            ...profile
         };
 
         res.locals.user = req.user;
+        res.locals.sessionToken = sessionToken;
 
-        console.log('SESIÓN VERIFICADA:', {
-            email: req.user.email,
-            id: req.user.id,
-            role: req.user.role,
-            url: req.originalUrl,
-            method: req.method
-        });
+        res.setHeader('Cache-Control', 'no-store, private');
+        res.setHeader('Referrer-Policy', 'no-referrer');
 
-        return next();
+        await updateActivity(sessionToken);
+
+        next();
 
     } catch (error) {
-        console.error('ERROR EN requireAuth:', error);
-
-        return res.status(500).send(
-            'Error al verificar la sesión.'
-        );
+        console.error('Error validando sesión:', error);
+        return res.status(500).send('Error al validar la sesión.');
     }
 }
 
-// ========================================
-// VALIDAR ROL ADMINISTRADOR
-// ========================================
+function requireRole(role) {
+    return (req, res, next) => {
+        if (!req.user || req.user.role !== role) {
+            return res.status(403).send('No tienes permisos para realizar esta acción.');
+        }
 
-function requireAdmin(req, res, next) {
-    console.log('VALIDANDO ADMINISTRADOR:', {
-        email: req.user?.email,
-        role: req.user?.role,
-        url: req.originalUrl
-    });
-
-    if (!req.user || req.user.role !== 'admin') {
-        return res.status(403).send(
-            'Esta sección es exclusiva del administrador.'
-        );
-    }
-
-    return next();
+        next();
+    };
 }
 
-// ========================================
-// VALIDAR ROL TÉCNICO
-// ========================================
-
-function requireTechnician(req, res, next) {
-    if (!req.user || req.user.role !== 'tecnico') {
-        return res.status(403).send(
-            'Esta sección es exclusiva del técnico.'
-        );
-    }
-
-    return next();
-}
-
-// ========================================
-// VALIDAR ROL USUARIO
-// ========================================
-
-function requireUser(req, res, next) {
-    if (!req.user || req.user.role !== 'user') {
-        return res.status(403).send(
-            'Esta sección es exclusiva del usuario.'
-        );
-    }
-
-    return next();
-}
-
-// ========================================
-// VALIDAR PERSONAL DE TI
-// ========================================
+const requireAdmin = requireRole('admin');
+const requireTechnician = requireRole('tecnico');
+const requireUser = requireRole('user');
 
 function requireStaff(req, res, next) {
-    if (
-        !req.user ||
-        !['admin', 'tecnico'].includes(req.user.role)
-    ) {
-        return res.status(403).send(
-            'No tienes permisos para realizar esta acción.'
-        );
+    if (!req.user || !['admin', 'tecnico'].includes(req.user.role)) {
+        return res.status(403).send('No tienes permisos para realizar esta acción.');
     }
 
-    return next();
+    next();
 }
 
 module.exports = {
