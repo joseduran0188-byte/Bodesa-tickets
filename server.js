@@ -13,9 +13,17 @@ const usuarioRoutes = require('./routes/usuario');
 
 const app = express();
 
+// ========================================
+// CONFIGURACIÓN GENERAL
+// ========================================
+
 app.set('trust proxy', 1);
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
+
+// ========================================
+// MIDDLEWARES
+// ========================================
 
 app.use(helmet({
     contentSecurityPolicy: false
@@ -25,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+// Evitar caché de páginas privadas.
 app.use((req, res, next) => {
     res.setHeader(
         'Cache-Control',
@@ -37,38 +46,67 @@ app.use((req, res, next) => {
     next();
 });
 
+// Archivos estáticos.
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Autenticación
+// ========================================
+// AUTENTICACIÓN
+// ========================================
+
 app.use('/', authRoutes);
 
-// Módulos independientes por rol
-app.use('/admin', adminRoutes);
-app.use('/tecnico', tecnicoRoutes);
-app.use('/usuario', usuarioRoutes);
+// ========================================
+// MÓDULOS INDEPENDIENTES POR ROL
+// ========================================
 
-// Ruta principal
+// Administrador
+app.use('/admin/tickets', adminRoutes);
+
+// Técnico
+app.use('/tecnico/tickets', tecnicoRoutes);
+
+// Usuario
+app.use('/usuario/tickets', usuarioRoutes);
+
+// ========================================
+// RUTA PRINCIPAL
+// ========================================
+
 app.get('/', (req, res) => {
     res.redirect('/login');
 });
 
-// Página no encontrada
+// ========================================
+// PÁGINA NO ENCONTRADA
+// ========================================
+
 app.use((req, res) => {
     res.status(404).send('Página no encontrada.');
 });
 
-// Manejo de errores
-app.use((err, req, res, next) => {
-    console.error('Error general:', err);
+// ========================================
+// MANEJO GENERAL DE ERRORES
+// ========================================
 
-    res.status(500).send('Ocurrió un error interno.');
+app.use((err, req, res, next) => {
+    console.error('ERROR GENERAL:', err);
+
+    res.status(500).send(
+        'Ocurrió un error interno.'
+    );
 });
+
+// ========================================
+// INICIAR SERVIDOR
+// ========================================
 
 if (require.main === module) {
     const PORT = process.env.PORT || 3000;
 
     app.listen(PORT, () => {
-        console.log(`Servidor iniciado en el puerto ${PORT}`);
+        console.log(
+            `Servidor iniciado en el puerto ${PORT}`
+        );
     });
 }
 
