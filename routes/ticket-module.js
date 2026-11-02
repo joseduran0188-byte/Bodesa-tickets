@@ -8,6 +8,10 @@ const {
     requireUser
 } = require('../middleware/auth');
 
+// ========================================
+// CONFIGURACIÓN
+// ========================================
+
 const CATEGORIAS = [
     'general',
     'software',
@@ -36,6 +40,16 @@ function limpiar(valor) {
     return typeof valor === 'string' ? valor.trim() : '';
 }
 
+// Validación de identificadores UUID.
+function esUUID(valor) {
+    return typeof valor === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor);
+}
+
+// ========================================
+// CONFIGURACIÓN DE MÓDULOS
+// ========================================
+
 const MODULOS = {
     admin: {
         middleware: requireAdmin,
@@ -43,12 +57,14 @@ const MODULOS = {
         detalle: 'admin/ticket-detalle',
         base: '/admin/tickets'
     },
+
     tecnico: {
         middleware: requireTechnician,
         dashboard: 'tecnico/dashboard',
         detalle: 'tecnico/ticket-detalle',
         base: '/tecnico/tickets'
     },
+
     user: {
         middleware: requireUser,
         dashboard: 'usuario/dashboard',
@@ -56,6 +72,10 @@ const MODULOS = {
         base: '/usuario/tickets'
     }
 };
+
+// ========================================
+// FACTORY DE MÓDULOS
+// ========================================
 
 function crearModuloTickets(rol) {
     const modulo = MODULOS[rol];
@@ -66,7 +86,8 @@ function crearModuloTickets(rol) {
 
     const router = express.Router();
 
-    // Todas las rutas requieren sesión y el rol correspondiente.
+    // Todas las rutas requieren autenticación
+    // y el rol correspondiente.
     router.use(requireAuth, modulo.middleware);
 
     function rutaDetalle(id) {
@@ -74,7 +95,7 @@ function crearModuloTickets(rol) {
     }
 
     // ========================================
-    // PANEL
+    // PANEL DE TICKETS
     // ========================================
 
     router.get('/', async (req, res) => {
@@ -84,6 +105,8 @@ function crearModuloTickets(rol) {
                 .select('*')
                 .order('created_at', { ascending: false });
 
+            // El usuario solamente consulta sus tickets.
+            // Técnico y administrador consultan todos.
             if (rol === 'user') {
                 query = query.eq('solicitante_id', req.user.id);
             }
@@ -91,7 +114,13 @@ function crearModuloTickets(rol) {
             const { data: tickets, error } = await query;
 
             if (error) {
-                console.error('ERROR AL CONSULTAR TICKETS:', error);
+                console.error('ERROR AL CONSULTAR TICKETS:', {
+                    message: error.message,
+                    code: error.code,
+                    details: error.details,
+                    hint: error.hint
+                });
+
                 return res.status(500).send(
                     'No se pudieron cargar los tickets.'
                 );
@@ -105,15 +134,20 @@ function crearModuloTickets(rol) {
 
         } catch (error) {
             console.error('ERROR EN DASHBOARD:', error);
-            return res.status(500).send('Error al cargar el panel.');
+
+            return res.status(500).send(
+                'Error al cargar el panel.'
+            );
         }
     });
 
     // ========================================
-    // FORMULARIO NUEVO: SOLO USUARIO
+    // CREAR TICKET: SOLO USUARIO
     // ========================================
 
     if (rol === 'user') {
+
+        // Mostrar formulario.
         router.get('/nuevo', (req, res) => {
             return res.render('usuario/ticket-nuevo', {
                 title: 'Nuevo ticket',
@@ -122,6 +156,7 @@ function crearModuloTickets(rol) {
             });
         });
 
+        // Registrar ticket.
         router.post('/nuevo', async (req, res) => {
             try {
                 const nombre = limpiar(req.body.nombre_solicitante);
@@ -150,12 +185,15 @@ function crearModuloTickets(rol) {
                     nombre_solicitante: nombre,
                     titulo,
                     descripcion,
+
                     categoria: CATEGORIAS.includes(categoria)
                         ? categoria
                         : 'general',
+
                     prioridad: PRIORIDADES.includes(prioridad)
                         ? prioridad
                         : 'media',
+
                     solicitante_id: req.user.id,
                     estado: 'pendiente',
                     responsable: null
@@ -166,7 +204,13 @@ function crearModuloTickets(rol) {
                     .insert(nuevoTicket);
 
                 if (error) {
-                    console.error('ERROR AL CREAR TICKET:', error);
+                    console.error('ERROR AL CREAR TICKET:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        hint: error.hint
+                    });
+
                     return res.status(500).send(
                         'No se pudo crear el ticket.'
                     );
@@ -176,43 +220,84 @@ function crearModuloTickets(rol) {
 
             } catch (error) {
                 console.error('ERROR AL CREAR TICKET:', error);
-                return res.status(500).send('Error al crear el ticket.');
+
+                return res.status(500).send(
+                    'Error al crear el ticket.'
+                );
             }
         });
     }
 
     // ========================================
-    // DETALLE
+    // CONSULTAR DETALLE DE TICKET
     // ========================================
 
     router.get('/:id', async (req, res) => {
         try {
+            const ticketId = req.params.id;
+
+            console.log('================================');
+            console.log('CONSULTANDO DETALLE DE TICKET');
+            console.log('ID recibido:', ticketId);
+            console.log('Rol:', req.user.role);
+            console.log('Usuario:', req.user.id);
+            console.log('================================');
+
+            // Validar UUID antes de consultar Supabase.
+            if (!esUUID(ticketId)) {
+                console.warn('IDENTIFICADOR DE TICKET NO VÁLIDO:', ticketId);
+
+                return res.status(400).send(
+                    'El identificador del ticket no es válido.'
+                );
+            }
+
             const { data: ticket, error } = await req.supabase
                 .from('tickets')
                 .select('*')
-                .eq('id', req.params.id)
+                .eq('id', ticketId)
                 .maybeSingle();
 
             if (error) {
-                console.error('ERROR AL CONSULTAR DETALLE:', error);
+                console.error('ERROR REAL DE SUPABASE AL CONSULTAR DETALLE:', {
+                    message: error.message,
+                    code: error.code,
+                    details: error.details,
+                    hint: error.hint
+                });
+
                 return res.status(500).send(
                     'Error al consultar la información del ticket.'
                 );
             }
 
             if (!ticket) {
-                return res.status(404).send('Ticket no encontrado.');
+                console.log('TICKET NO ENCONTRADO:', ticketId);
+
+                return res.status(404).send(
+                    'Ticket no encontrado.'
+                );
             }
 
-            // El usuario solo puede consultar sus propios tickets.
+            // El usuario solamente puede consultar sus propios tickets.
             if (
                 rol === 'user' &&
                 ticket.solicitante_id !== req.user.id
             ) {
+                console.warn(
+                    'USUARIO INTENTÓ CONSULTAR UN TICKET AJENO:',
+                    ticketId
+                );
+
                 return res.status(403).send(
                     'No tienes permiso para consultar este ticket.'
                 );
             }
+
+            console.log(
+                'TICKET CONSULTADO CORRECTAMENTE:',
+                ticket.id
+            );
 
             return res.render(modulo.detalle, {
                 title: `Ticket #${ticket.id}`,
@@ -222,7 +307,8 @@ function crearModuloTickets(rol) {
             });
 
         } catch (error) {
-            console.error('ERROR EN DETALLE:', error);
+            console.error('ERROR INESPERADO EN DETALLE:', error);
+
             return res.status(500).send(
                 'Error al cargar el detalle del ticket.'
             );
@@ -230,11 +316,20 @@ function crearModuloTickets(rol) {
     });
 
     // ========================================
-    // ACTUALIZAR
+    // ACTUALIZAR TICKET
     // ========================================
 
     router.post('/:id/actualizar', async (req, res) => {
         try {
+            const ticketId = req.params.id;
+
+            if (!esUUID(ticketId)) {
+                return res.status(400).send(
+                    'El identificador del ticket no es válido.'
+                );
+            }
+
+            // Buscar ticket.
             const { data: ticket, error: findError } = await req.supabase
                 .from('tickets')
                 .select(`
@@ -243,20 +338,29 @@ function crearModuloTickets(rol) {
                     fecha_atencion,
                     fecha_resolucion
                 `)
-                .eq('id', req.params.id)
+                .eq('id', ticketId)
                 .maybeSingle();
 
             if (findError) {
-                console.error('ERROR AL BUSCAR TICKET:', findError);
+                console.error('ERROR AL BUSCAR TICKET PARA ACTUALIZAR:', {
+                    message: findError.message,
+                    code: findError.code,
+                    details: findError.details,
+                    hint: findError.hint
+                });
+
                 return res.status(500).send(
                     'Error al consultar el ticket.'
                 );
             }
 
             if (!ticket) {
-                return res.status(404).send('Ticket no encontrado.');
+                return res.status(404).send(
+                    'Ticket no encontrado.'
+                );
             }
 
+            // Verificar propietario.
             if (
                 rol === 'user' &&
                 ticket.solicitante_id !== req.user.id
@@ -266,6 +370,7 @@ function crearModuloTickets(rol) {
                 );
             }
 
+            // Datos generales.
             const nombre = limpiar(req.body.nombre_solicitante);
             const titulo = limpiar(req.body.titulo);
             const descripcion = limpiar(req.body.descripcion);
@@ -288,7 +393,11 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // El usuario solo modifica los datos básicos mediante RPC.
+            // ========================================
+            // ACTUALIZACIÓN DE USUARIO
+            // SOLAMENTE DATOS BÁSICOS MEDIANTE RPC
+            // ========================================
+
             if (rol === 'user') {
                 const { error } = await req.supabase.rpc(
                     'update_own_ticket',
@@ -302,27 +411,42 @@ function crearModuloTickets(rol) {
                 );
 
                 if (error) {
-                    console.error('ERROR EN update_own_ticket:', error);
+                    console.error('ERROR EN update_own_ticket:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        hint: error.hint
+                    });
+
                     return res.status(500).send(
                         'No se pudieron actualizar los datos del ticket.'
                     );
                 }
 
-                return res.redirect(rutaDetalle(ticket.id));
+                return res.redirect(
+                    rutaDetalle(ticket.id)
+                );
             }
 
-            // Gestión exclusiva de administrador y técnico.
+            // ========================================
+            // ACTUALIZACIÓN DE TÉCNICO Y ADMIN
+            // ========================================
+
             const estado = limpiar(req.body.estado);
             const prioridad = limpiar(req.body.prioridad);
             const responsable = limpiar(req.body.responsable);
             const observaciones = limpiar(req.body.observaciones);
 
             if (!ESTADOS.includes(estado)) {
-                return res.status(400).send('Estado no válido.');
+                return res.status(400).send(
+                    'Estado no válido.'
+                );
             }
 
             if (!PRIORIDADES.includes(prioridad)) {
-                return res.status(400).send('Prioridad no válida.');
+                return res.status(400).send(
+                    'Prioridad no válida.'
+                );
             }
 
             if (
@@ -348,11 +472,19 @@ function crearModuloTickets(rol) {
                 updated_at: ahora
             };
 
-            if (estado === 'en_proceso' && !ticket.fecha_atencion) {
+            // Registrar primera fecha de atención.
+            if (
+                estado === 'en_proceso' &&
+                !ticket.fecha_atencion
+            ) {
                 actualizacion.fecha_atencion = ahora;
             }
 
-            if (estado === 'resuelto' && !ticket.fecha_resolucion) {
+            // Registrar primera fecha de resolución.
+            if (
+                estado === 'resuelto' &&
+                !ticket.fecha_resolucion
+            ) {
                 actualizacion.fecha_resolucion = ahora;
             }
 
@@ -362,51 +494,87 @@ function crearModuloTickets(rol) {
                 .eq('id', ticket.id);
 
             if (error) {
-                console.error('ERROR AL ACTUALIZAR TICKET:', error);
+                console.error('ERROR AL ACTUALIZAR TICKET:', {
+                    message: error.message,
+                    code: error.code,
+                    details: error.details,
+                    hint: error.hint
+                });
+
                 return res.status(500).send(
                     'No se pudo actualizar el ticket.'
                 );
             }
 
-            return res.redirect(rutaDetalle(ticket.id));
+            return res.redirect(
+                rutaDetalle(ticket.id)
+            );
 
         } catch (error) {
             console.error('ERROR EN ACTUALIZACIÓN:', error);
-            return res.status(500).send('Error al actualizar el ticket.');
+
+            return res.status(500).send(
+                'Error al actualizar el ticket.'
+            );
         }
     });
 
     // ========================================
-    // ELIMINAR: SOLO ADMINISTRADOR
+    // ELIMINAR TICKET: SOLO ADMINISTRADOR
     // ========================================
 
     if (rol === 'admin') {
+
         router.post('/:id/eliminar', async (req, res) => {
             try {
+                const ticketId = req.params.id;
+
+                if (!esUUID(ticketId)) {
+                    return res.status(400).send(
+                        'El identificador del ticket no es válido.'
+                    );
+                }
+
+                // Verificar que exista el ticket.
                 const { data: ticket, error: findError } = await req.supabase
                     .from('tickets')
                     .select('id')
-                    .eq('id', req.params.id)
+                    .eq('id', ticketId)
                     .maybeSingle();
 
                 if (findError) {
-                    console.error('ERROR AL BUSCAR TICKET:', findError);
+                    console.error('ERROR AL BUSCAR TICKET PARA ELIMINAR:', {
+                        message: findError.message,
+                        code: findError.code,
+                        details: findError.details,
+                        hint: findError.hint
+                    });
+
                     return res.status(500).send(
                         'Error al consultar el ticket.'
                     );
                 }
 
                 if (!ticket) {
-                    return res.status(404).send('Ticket no encontrado.');
+                    return res.status(404).send(
+                        'Ticket no encontrado.'
+                    );
                 }
 
+                // Eliminar ticket.
                 const { error } = await req.supabase
                     .from('tickets')
                     .delete()
                     .eq('id', ticket.id);
 
                 if (error) {
-                    console.error('ERROR AL ELIMINAR TICKET:', error);
+                    console.error('ERROR AL ELIMINAR TICKET:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        hint: error.hint
+                    });
+
                     return res.status(500).send(
                         'No se pudo eliminar el ticket.'
                     );
@@ -416,7 +584,10 @@ function crearModuloTickets(rol) {
 
             } catch (error) {
                 console.error('ERROR AL ELIMINAR:', error);
-                return res.status(500).send('Error al eliminar el ticket.');
+
+                return res.status(500).send(
+                    'Error al eliminar el ticket.'
+                );
             }
         });
     }
