@@ -11,19 +11,15 @@ const ticketRoutes = require('./routes/tickets');
 
 const app = express();
 
-// Configuración para despliegue en Vercel
 app.set('trust proxy', 1);
 
-// Configuración de Pug
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
 
-// Seguridad HTTP
 app.use(helmet({
     contentSecurityPolicy: false
 }));
 
-// Middlewares para procesar solicitudes
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -41,13 +37,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// Archivos estáticos: CSS, JavaScript e imágenes
+// Archivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Rutas públicas de autenticación
 app.use('/', authRoutes);
 
-// Rutas protegidas de tickets
+// Rutas de tickets
 app.use('/tickets', ticketRoutes);
 
 // Página principal
@@ -63,7 +59,6 @@ app.use((req, res) => {
 // Manejo general de errores
 app.use((err, req, res, next) => {
     console.error('Error general:', err);
-
     res.status(500).send('Ocurrió un error interno.');
 });
 

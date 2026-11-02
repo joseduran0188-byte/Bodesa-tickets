@@ -85,6 +85,15 @@ nav a:hover {
   gap: 10px;
   font-size: 0.9rem;
 }
+.user-info form {
+    display: inline;
+    margin: 0;
+}
+
+button.btn-logout {
+    font: inherit;
+    cursor: pointer;
+}
 
 .user-info .role {
   background: var(--gray-100);

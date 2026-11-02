@@ -43,7 +43,7 @@ html(lang="es")
                             span #{user.full_name || user.email}
                             span.role (#{user.role})
 
-                            //- Cerrar sesión mediante POST
+                            //- Cierre de sesión mediante POST
                             form(action="/logout" method="POST")
                                 button.btn-logout(type="submit")
                                     i.fa-solid.fa-right-from-bracket
