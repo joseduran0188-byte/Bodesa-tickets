@@ -36,6 +36,10 @@ const ESTADOS = [
     'cancelado'
 ];
 
+// ========================================
+// FUNCIONES AUXILIARES
+// ========================================
+
 function limpiar(valor) {
     return typeof valor === 'string' ? valor.trim() : '';
 }
@@ -83,7 +87,6 @@ function crearModuloTickets(rol) {
         throw new Error(`Rol de módulo no válido: ${rol}`);
     }
 
-    // Recuperar sessionToken desde la ruta principal.
     const router = express.Router({
         mergeParams: true
     });
@@ -127,7 +130,7 @@ function crearModuloTickets(rol) {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            // El usuario únicamente consulta sus tickets.
+            // El usuario únicamente consulta sus propios tickets.
             if (rol === 'user') {
                 query = query.eq('solicitante_id', req.user.id);
             }
@@ -165,6 +168,7 @@ function crearModuloTickets(rol) {
 
     if (rol === 'user') {
 
+        // Mostrar formulario.
         router.get('/nuevo', (req, res) => {
             return res.render(
                 'usuario/ticket-nuevo',
@@ -175,6 +179,7 @@ function crearModuloTickets(rol) {
             );
         });
 
+        // Procesar creación.
         router.post('/nuevo', async (req, res) => {
             try {
                 const nombre = limpiar(req.body.nombre_solicitante);
@@ -275,6 +280,7 @@ function crearModuloTickets(rol) {
                 );
             }
 
+            // Verificar propiedad del ticket para usuarios.
             if (
                 rol === 'user' &&
                 ticket.solicitante_id !== req.user.id
@@ -316,6 +322,7 @@ function crearModuloTickets(rol) {
                 );
             }
 
+            // Buscar el ticket.
             const { data: ticket, error: findError } = await req.supabase
                 .from('tickets')
                 .select('id, solicitante_id, fecha_atencion, fecha_resolucion')
@@ -336,39 +343,42 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            if (
-                rol === 'user' &&
-                ticket.solicitante_id !== req.user.id
-            ) {
-                return res.status(403).send(
-                    'No tienes permiso para editar este ticket.'
-                );
-            }
+            // ========================================
+            // ACTUALIZACIÓN DEL USUARIO
+            // ========================================
 
-            const nombre = limpiar(req.body.nombre_solicitante);
-            const titulo = limpiar(req.body.titulo);
-            const descripcion = limpiar(req.body.descripcion);
-            const categoria = limpiar(req.body.categoria);
-
-            if (!nombre || !titulo || !descripcion || !categoria) {
-                return res.status(400).send(
-                    'Completa los campos obligatorios.'
-                );
-            }
-
-            if (
-                nombre.length > 150 ||
-                titulo.length > 200 ||
-                descripcion.length > 5000 ||
-                !CATEGORIAS.includes(categoria)
-            ) {
-                return res.status(400).send(
-                    'Los datos ingresados no son válidos.'
-                );
-            }
-
-            // Actualización del usuario mediante RPC.
             if (rol === 'user') {
+
+                // Comprobar que el ticket pertenece al usuario.
+                if (ticket.solicitante_id !== req.user.id) {
+                    return res.status(403).send(
+                        'No tienes permiso para editar este ticket.'
+                    );
+                }
+
+                const nombre = limpiar(req.body.nombre_solicitante);
+                const titulo = limpiar(req.body.titulo);
+                const descripcion = limpiar(req.body.descripcion);
+                const categoria = limpiar(req.body.categoria);
+
+                if (!nombre || !titulo || !descripcion || !categoria) {
+                    return res.status(400).send(
+                        'Completa todos los campos obligatorios.'
+                    );
+                }
+
+                if (
+                    nombre.length > 150 ||
+                    titulo.length > 200 ||
+                    descripcion.length > 5000 ||
+                    !CATEGORIAS.includes(categoria)
+                ) {
+                    return res.status(400).send(
+                        'Los datos ingresados no son válidos.'
+                    );
+                }
+
+                // El usuario actualiza mediante RPC.
                 const { error } = await req.supabase.rpc(
                     'update_own_ticket',
                     {
@@ -381,7 +391,10 @@ function crearModuloTickets(rol) {
                 );
 
                 if (error) {
-                    console.error('ERROR EN update_own_ticket:', error);
+                    console.error(
+                        'ERROR EN update_own_ticket:',
+                        error
+                    );
 
                     return res.status(500).send(
                         'No se pudieron actualizar los datos del ticket.'
@@ -394,73 +407,99 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // Actualización de técnico y administrador.
-            const estado = limpiar(req.body.estado);
-            const prioridad = limpiar(req.body.prioridad);
-            const responsable = limpiar(req.body.responsable);
-            const observaciones = limpiar(req.body.observaciones);
+            // ========================================
+            // ACTUALIZACIÓN DE ADMINISTRADOR Y TÉCNICO
+            // ========================================
 
-            if (!ESTADOS.includes(estado)) {
-                return res.status(400).send('Estado no válido.');
-            }
+            if (rol === 'admin' || rol === 'tecnico') {
 
-            if (!PRIORIDADES.includes(prioridad)) {
-                return res.status(400).send('Prioridad no válida.');
-            }
+                const estado = limpiar(req.body.estado);
+                const prioridad = limpiar(req.body.prioridad);
+                const responsable = limpiar(req.body.responsable);
+                const observaciones = limpiar(req.body.observaciones);
 
-            if (
-                responsable.length > 150 ||
-                observaciones.length > 5000
-            ) {
-                return res.status(400).send(
-                    'Los campos de gestión son demasiado largos.'
+                // Validar estado.
+                if (!ESTADOS.includes(estado)) {
+                    return res.status(400).send(
+                        'El estado seleccionado no es válido.'
+                    );
+                }
+
+                // Validar prioridad.
+                if (!PRIORIDADES.includes(prioridad)) {
+                    return res.status(400).send(
+                        'La prioridad seleccionada no es válida.'
+                    );
+                }
+
+                // Validar longitudes.
+                if (
+                    responsable.length > 150 ||
+                    observaciones.length > 5000
+                ) {
+                    return res.status(400).send(
+                        'Los campos de gestión superan la longitud permitida.'
+                    );
+                }
+
+                const ahora = new Date().toISOString();
+
+                const actualizacion = {
+                    estado,
+                    prioridad,
+                    responsable: responsable || null,
+                    observaciones: observaciones || null,
+                    updated_at: ahora
+                };
+
+                // Registrar primera fecha de atención.
+                if (
+                    (estado === 'en_proceso' || estado === 'resuelto') &&
+                    !ticket.fecha_atencion
+                ) {
+                    actualizacion.fecha_atencion = ahora;
+                }
+
+                // Registrar fecha de resolución.
+                if (
+                    estado === 'resuelto' &&
+                    !ticket.fecha_resolucion
+                ) {
+                    actualizacion.fecha_resolucion = ahora;
+                }
+
+                const { data: actualizado, error } = await req.supabase
+                    .from('tickets')
+                    .update(actualizacion)
+                    .eq('id', ticket.id)
+                    .select('id')
+                    .maybeSingle();
+
+                if (error) {
+                    console.error(
+                        'ERROR AL ACTUALIZAR TICKET:',
+                        error
+                    );
+
+                    return res.status(500).send(
+                        'No se pudo actualizar el ticket.'
+                    );
+                }
+
+                if (!actualizado) {
+                    return res.status(403).send(
+                        'No tienes permisos para actualizar este ticket.'
+                    );
+                }
+
+                return res.redirect(
+                    303,
+                    rutaDetalle(req, ticket.id)
                 );
             }
 
-            const ahora = new Date().toISOString();
-
-            const actualizacion = {
-                nombre_solicitante: nombre,
-                titulo,
-                descripcion,
-                categoria,
-                estado,
-                prioridad,
-                responsable: responsable || null,
-                observaciones: observaciones || null,
-                updated_at: ahora
-            };
-
-            if (
-                estado === 'en_proceso' &&
-                !ticket.fecha_atencion
-            ) {
-                actualizacion.fecha_atencion = ahora;
-            }
-
-            if (
-                estado === 'resuelto' &&
-                !ticket.fecha_resolucion
-            ) {
-                actualizacion.fecha_resolucion = ahora;
-            }
-
-            const { error } = await req.supabase
-                .from('tickets')
-                .update(actualizacion)
-                .eq('id', ticket.id);
-
-            if (error) {
-                console.error('ERROR AL ACTUALIZAR TICKET:', error);
-
-                return res.status(500).send(
-                    'No se pudo actualizar el ticket.'
-                );
-            }
-
-            return res.redirect(
-                303,
-                rutaDetalle(req, ticket.id)
+            return res.status(403).send(
+                'No tienes permisos para realizar esta operación.'
             );
 
         } catch (error) {
@@ -508,16 +547,24 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                const { error } = await req.supabase
+                const { data: eliminado, error } = await req.supabase
                     .from('tickets')
                     .delete()
-                    .eq('id', ticket.id);
+                    .eq('id', ticket.id)
+                    .select('id')
+                    .maybeSingle();
 
                 if (error) {
                     console.error('ERROR AL ELIMINAR TICKET:', error);
 
                     return res.status(500).send(
                         'No se pudo eliminar el ticket.'
+                    );
+                }
+
+                if (!eliminado) {
+                    return res.status(403).send(
+                        'No tienes permisos para eliminar este ticket.'
                     );
                 }
 
