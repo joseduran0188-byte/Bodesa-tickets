@@ -27,6 +27,20 @@ const estadosPermitidos = [
 ];
 
 // =====================================================
+// MIDDLEWARE: SOLAMENTE ADMINISTRADORES
+// =====================================================
+
+function requireOnlyAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).send(
+      'Acceso denegado. Solo los administradores pueden realizar esta acción.'
+    );
+  }
+
+  return next();
+}
+
+// =====================================================
 // LISTAR TICKETS
 // =====================================================
 
@@ -47,7 +61,7 @@ router.get('/', requireAuth, async (req, res) => {
         )
       `);
 
-    // Los usuarios normales solamente ven sus solicitudes
+    // Los usuarios normales solamente ven sus solicitudes.
     if (req.user.role === 'user') {
       query = query.eq('solicitante_id', req.user.id);
     }
@@ -56,6 +70,7 @@ router.get('/', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
+    // Ordenar por prioridad y fecha de creación.
     const ticketsOrdenados = (tickets || []).sort((a, b) => {
       const prioridadA = ordenPrioridad[a.prioridad] || 99;
       const prioridadB = ordenPrioridad[b.prioridad] || 99;
@@ -75,7 +90,7 @@ router.get('/', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al cargar tickets:', err);
-    res.status(500).send('Error al cargar los tickets');
+    res.status(500).send('Error al cargar los tickets.');
   }
 });
 
@@ -104,6 +119,7 @@ router.post('/nuevo', requireAuth, async (req, res) => {
       categoria
     } = req.body;
 
+    // Validar campos obligatorios.
     if (
       typeof titulo !== 'string' ||
       typeof descripcion !== 'string' ||
@@ -112,6 +128,18 @@ router.post('/nuevo', requireAuth, async (req, res) => {
     ) {
       return res.status(400).send(
         'El título y la descripción son obligatorios.'
+      );
+    }
+
+    if (titulo.trim().length > 200) {
+      return res.status(400).send(
+        'El título no puede superar los 200 caracteres.'
+      );
+    }
+
+    if (descripcion.trim().length > 5000) {
+      return res.status(400).send(
+        'La descripción no puede superar los 5000 caracteres.'
       );
     }
 
@@ -127,7 +155,9 @@ router.post('/nuevo', requireAuth, async (req, res) => {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         prioridad: prioridadFinal,
-        categoria: categoria || null,
+        categoria: typeof categoria === 'string'
+          ? categoria.trim() || null
+          : null,
         solicitante_id: req.user.id,
         estado: 'pendiente'
       });
@@ -138,7 +168,7 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al crear ticket:', err);
-    res.status(500).send('Error al crear el ticket');
+    res.status(500).send('Error al crear el ticket.');
   }
 });
 
@@ -171,7 +201,7 @@ router.post(
         );
       }
 
-      // Consultar propietario del ticket
+      // Consultar el propietario del ticket.
       const { data: ticket, error: consultaError } = await supabase
         .from('tickets')
         .select('id, solicitante_id')
@@ -194,15 +224,23 @@ router.post(
         );
       }
 
-      const { error: updateError } = await supabase
+      const { data: actualizado, error: updateError } = await supabase
         .from('tickets')
         .update({
           descripcion: descripcion.trim(),
           updated_at: new Date().toISOString()
         })
-        .eq('id', ticketId);
+        .eq('id', ticketId)
+        .select('id')
+        .single();
 
       if (updateError) throw updateError;
+
+      if (!actualizado) {
+        return res.status(403).send(
+          'No fue posible actualizar el ticket. Verifica los permisos.'
+        );
+      }
 
       res.redirect(`/tickets/${ticketId}`);
 
@@ -223,12 +261,13 @@ router.post(
 router.post(
   '/:id/eliminar',
   requireAuth,
-  requireAdmin,
+  requireOnlyAdmin,
   async (req, res) => {
     try {
       const supabase = req.supabase;
       const ticketId = req.params.id;
 
+      // Comprobar que el ticket existe.
       const { data: ticket, error: consultaError } = await supabase
         .from('tickets')
         .select('id')
@@ -239,12 +278,20 @@ router.post(
         return res.status(404).send('Ticket no encontrado.');
       }
 
-      const { error: deleteError } = await supabase
+      // Eliminar ticket.
+      const { data: eliminados, error: deleteError } = await supabase
         .from('tickets')
         .delete()
-        .eq('id', ticketId);
+        .eq('id', ticketId)
+        .select('id');
 
       if (deleteError) throw deleteError;
+
+      if (!eliminados || eliminados.length === 0) {
+        return res.status(403).send(
+          'No se pudo eliminar el ticket. Verifica las políticas de Supabase.'
+        );
+      }
 
       res.redirect('/tickets');
 
@@ -282,6 +329,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.status(404).send('Ticket no encontrado.');
     }
 
+    // Los usuarios normales solamente pueden consultar sus tickets.
     if (
       req.user.role === 'user' &&
       ticket.solicitante_id !== req.user.id
@@ -293,12 +341,13 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     res.render('ticket-detalle', {
       user: req.user,
-      ticket
+      ticket,
+      editarDescripcion: req.query.editar === '1'
     });
 
   } catch (err) {
     console.error('Error al consultar ticket:', err);
-    res.status(500).send('Error al consultar el ticket');
+    res.status(500).send('Error al consultar el ticket.');
   }
 });
 
@@ -324,14 +373,24 @@ router.post(
 
       const ticketId = req.params.id;
 
+      // Validar estado.
       if (!estadosPermitidos.includes(estado)) {
         return res.status(400).send('Estado no válido.');
       }
 
+      // Validar prioridad.
       if (!prioridadesPermitidas.includes(prioridad)) {
         return res.status(400).send('Prioridad no válida.');
       }
 
+      if (
+        observaciones !== undefined &&
+        typeof observaciones !== 'string'
+      ) {
+        return res.status(400).send('Observaciones no válidas.');
+      }
+
+      // Consultar ticket actual.
       const { data: actual, error: consultaError } = await supabase
         .from('tickets')
         .select('id, fecha_atencion, fecha_resolucion')
@@ -342,20 +401,23 @@ router.post(
         return res.status(404).send('Ticket no encontrado.');
       }
 
+      // Preparar actualización.
       const updates = {
         estado,
         prioridad,
         observaciones: observaciones
-          ? observaciones.trim()
+          ? observaciones.trim() || null
           : null,
         updated_at: new Date().toISOString()
       };
 
+      // Asignar técnico si el formulario envió el campo.
       if (tecnico_asignado_id !== undefined) {
         updates.tecnico_asignado_id =
           tecnico_asignado_id || null;
       }
 
+      // Registrar primera fecha de atención.
       if (
         estado === 'en_proceso' &&
         !actual.fecha_atencion
@@ -363,6 +425,7 @@ router.post(
         updates.fecha_atencion = new Date().toISOString();
       }
 
+      // Registrar fecha de resolución.
       if (['resuelto', 'cerrado'].includes(estado)) {
         if (!actual.fecha_resolucion) {
           updates.fecha_resolucion = new Date().toISOString();
@@ -382,7 +445,7 @@ router.post(
 
     } catch (err) {
       console.error('Error al actualizar ticket:', err);
-      res.status(500).send('Error al actualizar el ticket');
+      res.status(500).send('Error al actualizar el ticket.');
     }
   }
 );

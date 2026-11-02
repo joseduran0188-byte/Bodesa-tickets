@@ -3,72 +3,80 @@ extends layout
 
 block content
   .page-header
-    h2 Gestión de solicitudes
-    a.btn.btn-primary(href="/tickets/nuevo") + Nuevo ticket
+    h2 Dashboard de Solicitudes
+    a.btn.btn-primary(href="/tickets/nuevo")
+      i.fa-solid.fa-plus
+      |  Nueva Solicitud
 
-  .table-container
-    table
-      thead
-        tr
-          th Folio
-          th Título
-          th Solicitante
-          th Categoría
-          th Prioridad
-          th Estado
-          th Fecha de creación
-          th Acciones
+  if !tickets || tickets.length === 0
+    .empty-state
+      p No hay solicitudes registradas.
+      a.btn.btn-primary(href="/tickets/nuevo") Crear la primera
 
-      tbody
-        if tickets && tickets.length
+  else
+    .tickets-table-wrapper
+      table.tickets-table
+        thead
+          tr
+            th Prioridad
+            th Título
+            th Estado
+            th Solicitante
+            th Técnico
+            th Fecha creación
+            th Acciones
+
+        tbody
           each ticket in tickets
             tr
-              td= ticket.id
-              td= ticket.titulo
-              td= ticket.solicitante ? ticket.solicitante.full_name : '—'
-              td= ticket.categoria || '—'
-
               td
                 span(class=`badge badge-${ticket.prioridad}`)
                   = ticket.prioridad
+
+              td= ticket.titulo
 
               td
                 span(class=`badge badge-estado-${ticket.estado}`)
                   = ticket.estado
 
-              td= new Date(ticket.fecha_creacion).toLocaleDateString('es-MX')
+              td= ticket.solicitante
+                ? ticket.solicitante.full_name
+                : '—'
+
+              td= ticket.tecnico
+                ? ticket.tecnico.full_name
+                : 'Sin asignar'
+
+              td= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
 
               //- ACCIONES
               td.actions
-                //- Ver ticket
+                //- Ver solicitud
                 a.action-btn(
                   href=`/tickets/${ticket.id}`
-                  title="Ver ticket"
-                  aria-label="Ver ticket"
+                  title="Ver solicitud"
+                  aria-label="Ver solicitud"
                 )
-                  i(class="fa-solid fa-eye")
+                  i.fa-solid.fa-eye
 
                 //- Editar descripción
                 a.action-btn(
-                  href=`/tickets/${ticket.id}`
-                  title="Editar ticket"
-                  aria-label="Editar ticket"
+                  href=`/tickets/${ticket.id}#editar-descripcion`
+                  title="Editar descripción"
+                  aria-label="Editar descripción"
                 )
-                  i(class="fa-solid fa-pen-to-square")
+                  i.fa-solid.fa-pen-to-square
 
-                //- Eliminar: solamente administrador
+                //- Eliminar: exclusivamente administrador
                 if user.role === 'admin'
                   form(
                     method="POST"
                     action=`/tickets/${ticket.id}/eliminar`
-                    onsubmit="return confirm('¿Estás seguro de eliminar este ticket? Esta acción no se puede deshacer.');"
+                    onsubmit="return confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.');"
                   )
                     button.action-btn.action-delete(
                       type="submit"
-                      title="Eliminar ticket"
-                      aria-label="Eliminar ticket"
+                      title="Eliminar solicitud"
+                      aria-label="Eliminar solicitud"
                     )
-                      i(class="fa-solid fa-trash")
-        else
-          tr
-            td(colspan="8") No hay solicitudes registradas.
+                      i.fa-solid.fa-trash

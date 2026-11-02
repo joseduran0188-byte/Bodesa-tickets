@@ -4,19 +4,25 @@ extends layout
 block content
   .page-header
     h2= ticket.titulo
-    a.btn.btn-secondary(href="/tickets") ← Volver
+    a.btn.btn-secondary(href="/tickets")
+      i.fa-solid.fa-arrow-left
+      |  Volver
 
   .detail-grid
+
+    //- INFORMACIÓN DE LA SOLICITUD
     .detail-card
       h3 Información de la solicitud
 
       .detail-item
         strong Estado:
-        span(class=`badge badge-estado-${ticket.estado}`)= ticket.estado
+        span(class=`badge badge-estado-${ticket.estado}`)
+          = ticket.estado
 
       .detail-item
         strong Prioridad:
-        span(class=`badge badge-${ticket.prioridad}`)= ticket.prioridad
+        span(class=`badge badge-${ticket.prioridad}`)
+          = ticket.prioridad
 
       .detail-item
         strong Categoría:
@@ -24,15 +30,27 @@ block content
 
       .detail-item
         strong Solicitante:
-        span= ticket.solicitante ? ticket.solicitante.full_name : '—'
+        span= ticket.solicitante
+          ? ticket.solicitante.full_name
+          : '—'
+
+      .detail-item
+        strong Correo:
+        span= ticket.solicitante
+          ? ticket.solicitante.email
+          : '—'
 
       .detail-item
         strong Técnico asignado:
-        span= ticket.tecnico ? ticket.tecnico.full_name : 'Sin asignar'
+        span= ticket.tecnico
+          ? ticket.tecnico.full_name
+          : 'Sin asignar'
 
       .detail-item
         strong Fecha de creación:
-        span= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
+        span= ticket.fecha_creacion
+          ? new Date(ticket.fecha_creacion).toLocaleString('es-MX')
+          : '—'
 
       .detail-item
         strong Fecha de atención:
@@ -46,15 +64,21 @@ block content
           ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX')
           : '—'
 
+    //- DESCRIPCIÓN
     .detail-card
       h3 Descripción
 
       p.descripcion= ticket.descripcion
 
-      //- Propietario, administrador o técnico pueden editar
+      //- Propietario, administrador o técnico pueden editar.
       if ticket.solicitante_id === user.id || ['admin', 'tecnico'].includes(user.role)
-        details.edit-description
-          summary.btn.btn-secondary Editar descripción
+
+        details#editar-descripcion.edit-description(
+          open=editarDescripcion
+        )
+          summary.btn.btn-secondary
+            i.fa-solid.fa-pen-to-square
+            |  Editar descripción
 
           form(
             method="POST"
@@ -70,16 +94,22 @@ block content
                 required
               )= ticket.descripcion
 
+              small.help-text
+                | Máximo 5000 caracteres.
+
             .form-actions
               button.btn.btn-primary(type="submit")
-                | Guardar descripción
+                i.fa-solid.fa-floppy-disk
+                |  Guardar descripción
 
       if ticket.observaciones
-        h4 Observaciones
-        p= ticket.observaciones
+        .observations-section
+          h4 Observaciones / Notas del técnico
+          p.descripcion= ticket.observaciones
 
-  //- Formulario de administración y soporte
+  //- ACTUALIZACIÓN PARA ADMINISTRADORES Y TÉCNICOS
   if user.role === 'admin' || user.role === 'tecnico'
+
     .form-card
       h3 Actualizar ticket
 
@@ -87,6 +117,7 @@ block content
         method="POST"
         action=`/tickets/${ticket.id}/actualizar`
       )
+
         .form-row
           .form-group
             label(for="estado") Estado
@@ -132,13 +163,15 @@ block content
               ) Alta
 
         .form-group
-          label(for="observaciones") Observaciones / Notas del técnico
+          label(for="observaciones")
+            | Observaciones / Notas del técnico
 
           textarea#observaciones(
             name="observaciones"
-            rows="3"
+            rows="4"
           )= ticket.observaciones || ''
 
         .form-actions
           button.btn.btn-primary(type="submit")
-            | Guardar cambios
+            i.fa-solid.fa-floppy-disk
+            |  Guardar cambios
