@@ -40,7 +40,6 @@ function limpiar(valor) {
     return typeof valor === 'string' ? valor.trim() : '';
 }
 
-// Validación de identificadores UUID.
 function esUUID(valor) {
     return typeof valor === 'string' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor);
@@ -84,14 +83,31 @@ function crearModuloTickets(rol) {
         throw new Error(`Rol de módulo no válido: ${rol}`);
     }
 
-    const router = express.Router();
+    // IMPORTANTE:
+    // mergeParams permite recuperar sessionToken
+    // desde la ruta principal de Express.
+    const router = express.Router({
+        mergeParams: true
+    });
 
-    // Todas las rutas requieren autenticación
-    // y el rol correspondiente.
+    // Autenticación y autorización una sola vez.
     router.use(requireAuth, modulo.middleware);
 
-    function rutaDetalle(id) {
-        return `${modulo.base}/${id}`;
+    function obtenerBase(req) {
+        return `/sesion/${encodeURIComponent(req.params.sessionToken)}${modulo.base}`;
+    }
+
+    function rutaDetalle(req, id) {
+        return `${obtenerBase(req)}/${id}`;
+    }
+
+    function renderData(req, adicionales = {}) {
+        return {
+            user: req.user,
+            sessionToken: req.params.sessionToken,
+            dashboardUrl: obtenerBase(req),
+            ...adicionales
+        };
     }
 
     // ========================================
@@ -105,8 +121,6 @@ function crearModuloTickets(rol) {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            // El usuario solamente consulta sus tickets.
-            // Técnico y administrador consultan todos.
             if (rol === 'user') {
                 query = query.eq('solicitante_id', req.user.id);
             }
@@ -114,23 +128,20 @@ function crearModuloTickets(rol) {
             const { data: tickets, error } = await query;
 
             if (error) {
-                console.error('ERROR AL CONSULTAR TICKETS:', {
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint
-                });
+                console.error('ERROR AL CONSULTAR TICKETS:', error);
 
                 return res.status(500).send(
                     'No se pudieron cargar los tickets.'
                 );
             }
 
-            return res.render(modulo.dashboard, {
-                title: 'Panel de tickets',
-                user: req.user,
-                tickets: tickets || []
-            });
+            return res.render(
+                modulo.dashboard,
+                renderData(req, {
+                    title: 'Panel de tickets',
+                    tickets: tickets || []
+                })
+            );
 
         } catch (error) {
             console.error('ERROR EN DASHBOARD:', error);
@@ -147,16 +158,16 @@ function crearModuloTickets(rol) {
 
     if (rol === 'user') {
 
-        // Mostrar formulario.
         router.get('/nuevo', (req, res) => {
-            return res.render('usuario/ticket-nuevo', {
-                title: 'Nuevo ticket',
-                user: req.user,
-                error: null
-            });
+            return res.render(
+                'usuario/ticket-nuevo',
+                renderData(req, {
+                    title: 'Nuevo ticket',
+                    error: null
+                })
+            );
         });
 
-        // Registrar ticket.
         router.post('/nuevo', async (req, res) => {
             try {
                 const nombre = limpiar(req.body.nombre_solicitante);
@@ -204,19 +215,14 @@ function crearModuloTickets(rol) {
                     .insert(nuevoTicket);
 
                 if (error) {
-                    console.error('ERROR AL CREAR TICKET:', {
-                        message: error.message,
-                        code: error.code,
-                        details: error.details,
-                        hint: error.hint
-                    });
+                    console.error('ERROR AL CREAR TICKET:', error);
 
                     return res.status(500).send(
                         'No se pudo crear el ticket.'
                     );
                 }
 
-                return res.redirect(modulo.base);
+                return res.redirect(obtenerBase(req));
 
             } catch (error) {
                 console.error('ERROR AL CREAR TICKET:', error);
@@ -236,17 +242,7 @@ function crearModuloTickets(rol) {
         try {
             const ticketId = req.params.id;
 
-            console.log('================================');
-            console.log('CONSULTANDO DETALLE DE TICKET');
-            console.log('ID recibido:', ticketId);
-            console.log('Rol:', req.user.role);
-            console.log('Usuario:', req.user.id);
-            console.log('================================');
-
-            // Validar UUID antes de consultar Supabase.
             if (!esUUID(ticketId)) {
-                console.warn('IDENTIFICADOR DE TICKET NO VÁLIDO:', ticketId);
-
                 return res.status(400).send(
                     'El identificador del ticket no es válido.'
                 );
@@ -259,12 +255,7 @@ function crearModuloTickets(rol) {
                 .maybeSingle();
 
             if (error) {
-                console.error('ERROR REAL DE SUPABASE AL CONSULTAR DETALLE:', {
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint
-                });
+                console.error('ERROR AL CONSULTAR DETALLE:', error);
 
                 return res.status(500).send(
                     'Error al consultar la información del ticket.'
@@ -272,42 +263,31 @@ function crearModuloTickets(rol) {
             }
 
             if (!ticket) {
-                console.log('TICKET NO ENCONTRADO:', ticketId);
-
                 return res.status(404).send(
                     'Ticket no encontrado.'
                 );
             }
 
-            // El usuario solamente puede consultar sus propios tickets.
             if (
                 rol === 'user' &&
                 ticket.solicitante_id !== req.user.id
             ) {
-                console.warn(
-                    'USUARIO INTENTÓ CONSULTAR UN TICKET AJENO:',
-                    ticketId
-                );
-
                 return res.status(403).send(
                     'No tienes permiso para consultar este ticket.'
                 );
             }
 
-            console.log(
-                'TICKET CONSULTADO CORRECTAMENTE:',
-                ticket.id
+            return res.render(
+                modulo.detalle,
+                renderData(req, {
+                    title: `Ticket #${ticket.id}`,
+                    ticket,
+                    editarTicket: req.query.editar === '1'
+                })
             );
 
-            return res.render(modulo.detalle, {
-                title: `Ticket #${ticket.id}`,
-                user: req.user,
-                ticket,
-                editarTicket: req.query.editar === '1'
-            });
-
         } catch (error) {
-            console.error('ERROR INESPERADO EN DETALLE:', error);
+            console.error('ERROR EN DETALLE:', error);
 
             return res.status(500).send(
                 'Error al cargar el detalle del ticket.'
@@ -329,25 +309,14 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // Buscar ticket.
             const { data: ticket, error: findError } = await req.supabase
                 .from('tickets')
-                .select(`
-                    id,
-                    solicitante_id,
-                    fecha_atencion,
-                    fecha_resolucion
-                `)
+                .select('id, solicitante_id, fecha_atencion, fecha_resolucion')
                 .eq('id', ticketId)
                 .maybeSingle();
 
             if (findError) {
-                console.error('ERROR AL BUSCAR TICKET PARA ACTUALIZAR:', {
-                    message: findError.message,
-                    code: findError.code,
-                    details: findError.details,
-                    hint: findError.hint
-                });
+                console.error('ERROR AL BUSCAR TICKET:', findError);
 
                 return res.status(500).send(
                     'Error al consultar el ticket.'
@@ -360,7 +329,6 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // Verificar propietario.
             if (
                 rol === 'user' &&
                 ticket.solicitante_id !== req.user.id
@@ -370,7 +338,6 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // Datos generales.
             const nombre = limpiar(req.body.nombre_solicitante);
             const titulo = limpiar(req.body.titulo);
             const descripcion = limpiar(req.body.descripcion);
@@ -393,10 +360,9 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // ========================================
-            // ACTUALIZACIÓN DE USUARIO
-            // SOLAMENTE DATOS BÁSICOS MEDIANTE RPC
-            // ========================================
+            // ------------------------------------
+            // ACTUALIZACIÓN DE USUARIO MEDIANTE RPC
+            // ------------------------------------
 
             if (rol === 'user') {
                 const { error } = await req.supabase.rpc(
@@ -411,12 +377,7 @@ function crearModuloTickets(rol) {
                 );
 
                 if (error) {
-                    console.error('ERROR EN update_own_ticket:', {
-                        message: error.message,
-                        code: error.code,
-                        details: error.details,
-                        hint: error.hint
-                    });
+                    console.error('ERROR EN update_own_ticket:', error);
 
                     return res.status(500).send(
                         'No se pudieron actualizar los datos del ticket.'
@@ -424,13 +385,13 @@ function crearModuloTickets(rol) {
                 }
 
                 return res.redirect(
-                    rutaDetalle(ticket.id)
+                    rutaDetalle(req, ticket.id)
                 );
             }
 
-            // ========================================
+            // ------------------------------------
             // ACTUALIZACIÓN DE TÉCNICO Y ADMIN
-            // ========================================
+            // ------------------------------------
 
             const estado = limpiar(req.body.estado);
             const prioridad = limpiar(req.body.prioridad);
@@ -438,15 +399,11 @@ function crearModuloTickets(rol) {
             const observaciones = limpiar(req.body.observaciones);
 
             if (!ESTADOS.includes(estado)) {
-                return res.status(400).send(
-                    'Estado no válido.'
-                );
+                return res.status(400).send('Estado no válido.');
             }
 
             if (!PRIORIDADES.includes(prioridad)) {
-                return res.status(400).send(
-                    'Prioridad no válida.'
-                );
+                return res.status(400).send('Prioridad no válida.');
             }
 
             if (
@@ -472,7 +429,6 @@ function crearModuloTickets(rol) {
                 updated_at: ahora
             };
 
-            // Registrar primera fecha de atención.
             if (
                 estado === 'en_proceso' &&
                 !ticket.fecha_atencion
@@ -480,7 +436,6 @@ function crearModuloTickets(rol) {
                 actualizacion.fecha_atencion = ahora;
             }
 
-            // Registrar primera fecha de resolución.
             if (
                 estado === 'resuelto' &&
                 !ticket.fecha_resolucion
@@ -494,12 +449,7 @@ function crearModuloTickets(rol) {
                 .eq('id', ticket.id);
 
             if (error) {
-                console.error('ERROR AL ACTUALIZAR TICKET:', {
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint
-                });
+                console.error('ERROR AL ACTUALIZAR TICKET:', error);
 
                 return res.status(500).send(
                     'No se pudo actualizar el ticket.'
@@ -507,7 +457,7 @@ function crearModuloTickets(rol) {
             }
 
             return res.redirect(
-                rutaDetalle(ticket.id)
+                rutaDetalle(req, ticket.id)
             );
 
         } catch (error) {
@@ -535,7 +485,6 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                // Verificar que exista el ticket.
                 const { data: ticket, error: findError } = await req.supabase
                     .from('tickets')
                     .select('id')
@@ -543,12 +492,7 @@ function crearModuloTickets(rol) {
                     .maybeSingle();
 
                 if (findError) {
-                    console.error('ERROR AL BUSCAR TICKET PARA ELIMINAR:', {
-                        message: findError.message,
-                        code: findError.code,
-                        details: findError.details,
-                        hint: findError.hint
-                    });
+                    console.error('ERROR AL BUSCAR TICKET:', findError);
 
                     return res.status(500).send(
                         'Error al consultar el ticket.'
@@ -561,26 +505,20 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                // Eliminar ticket.
                 const { error } = await req.supabase
                     .from('tickets')
                     .delete()
                     .eq('id', ticket.id);
 
                 if (error) {
-                    console.error('ERROR AL ELIMINAR TICKET:', {
-                        message: error.message,
-                        code: error.code,
-                        details: error.details,
-                        hint: error.hint
-                    });
+                    console.error('ERROR AL ELIMINAR TICKET:', error);
 
                     return res.status(500).send(
                         'No se pudo eliminar el ticket.'
                     );
                 }
 
-                return res.redirect(modulo.base);
+                return res.redirect(obtenerBase(req));
 
             } catch (error) {
                 console.error('ERROR AL ELIMINAR:', error);
