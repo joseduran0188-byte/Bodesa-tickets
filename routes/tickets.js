@@ -7,14 +7,16 @@ const {
   requireAdmin
 } = require('../middleware/auth');
 
-// Orden de prioridad
+// =====================================================
+// CONFIGURACIÓN
+// =====================================================
+
 const ordenPrioridad = {
   alta: 1,
   media: 2,
   baja: 3
 };
 
-// Valores permitidos
 const prioridadesPermitidas = ['alta', 'media', 'baja'];
 
 const estadosPermitidos = [
@@ -50,14 +52,10 @@ router.get('/', requireAuth, async (req, res) => {
       query = query.eq('solicitante_id', req.user.id);
     }
 
-    const {
-      data: tickets,
-      error
-    } = await query;
+    const { data: tickets, error } = await query;
 
     if (error) throw error;
 
-    // Ordenar por prioridad y fecha de creación
     const ticketsOrdenados = (tickets || []).sort((a, b) => {
       const prioridadA = ordenPrioridad[a.prioridad] || 99;
       const prioridadB = ordenPrioridad[b.prioridad] || 99;
@@ -77,11 +75,9 @@ router.get('/', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al cargar tickets:', err);
-
     res.status(500).send('Error al cargar los tickets');
   }
 });
-
 
 // =====================================================
 // FORMULARIO NUEVO TICKET
@@ -92,7 +88,6 @@ router.get('/nuevo', requireAuth, (req, res) => {
     user: req.user
   });
 });
-
 
 // =====================================================
 // CREAR TICKET
@@ -109,10 +104,9 @@ router.post('/nuevo', requireAuth, async (req, res) => {
       categoria
     } = req.body;
 
-    // Validar campos obligatorios
     if (
-      !titulo ||
-      !descripcion ||
+      typeof titulo !== 'string' ||
+      typeof descripcion !== 'string' ||
       !titulo.trim() ||
       !descripcion.trim()
     ) {
@@ -121,14 +115,12 @@ router.post('/nuevo', requireAuth, async (req, res) => {
       );
     }
 
-    // Validar prioridad
     const prioridadFinal = prioridad || 'media';
 
     if (!prioridadesPermitidas.includes(prioridadFinal)) {
       return res.status(400).send('Prioridad no válida.');
     }
 
-    // Insertar ticket
     const { error } = await supabase
       .from('tickets')
       .insert({
@@ -146,11 +138,122 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al crear ticket:', err);
-
     res.status(500).send('Error al crear el ticket');
   }
 });
 
+// =====================================================
+// EDITAR DESCRIPCIÓN
+// PROPIETARIO, ADMINISTRADOR O TÉCNICO
+// =====================================================
+
+router.post(
+  '/:id/editar-descripcion',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const supabase = req.supabase;
+      const ticketId = req.params.id;
+      const { descripcion } = req.body;
+
+      if (
+        typeof descripcion !== 'string' ||
+        !descripcion.trim()
+      ) {
+        return res.status(400).send(
+          'La descripción no puede estar vacía.'
+        );
+      }
+
+      if (descripcion.trim().length > 5000) {
+        return res.status(400).send(
+          'La descripción no puede superar los 5000 caracteres.'
+        );
+      }
+
+      // Consultar propietario del ticket
+      const { data: ticket, error: consultaError } = await supabase
+        .from('tickets')
+        .select('id, solicitante_id')
+        .eq('id', ticketId)
+        .single();
+
+      if (consultaError || !ticket) {
+        return res.status(404).send('Ticket no encontrado.');
+      }
+
+      const esPropietario =
+        ticket.solicitante_id === req.user.id;
+
+      const esPersonalTI =
+        ['admin', 'tecnico'].includes(req.user.role);
+
+      if (!esPropietario && !esPersonalTI) {
+        return res.status(403).send(
+          'No tienes permiso para editar este ticket.'
+        );
+      }
+
+      const { error: updateError } = await supabase
+        .from('tickets')
+        .update({
+          descripcion: descripcion.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', ticketId);
+
+      if (updateError) throw updateError;
+
+      res.redirect(`/tickets/${ticketId}`);
+
+    } catch (err) {
+      console.error('Error al editar descripción:', err);
+      res.status(500).send(
+        'Error al actualizar la descripción del ticket.'
+      );
+    }
+  }
+);
+
+// =====================================================
+// ELIMINAR TICKET
+// SOLAMENTE ADMINISTRADORES
+// =====================================================
+
+router.post(
+  '/:id/eliminar',
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const supabase = req.supabase;
+      const ticketId = req.params.id;
+
+      const { data: ticket, error: consultaError } = await supabase
+        .from('tickets')
+        .select('id')
+        .eq('id', ticketId)
+        .single();
+
+      if (consultaError || !ticket) {
+        return res.status(404).send('Ticket no encontrado.');
+      }
+
+      const { error: deleteError } = await supabase
+        .from('tickets')
+        .delete()
+        .eq('id', ticketId);
+
+      if (deleteError) throw deleteError;
+
+      res.redirect('/tickets');
+
+    } catch (err) {
+      console.error('Error al eliminar ticket:', err);
+      res.status(500).send('Error al eliminar el ticket.');
+    }
+  }
+);
 
 // =====================================================
 // VER DETALLE DE UN TICKET
@@ -160,10 +263,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const supabase = req.supabase;
 
-    const {
-      data: ticket,
-      error
-    } = await supabase
+    const { data: ticket, error } = await supabase
       .from('tickets')
       .select(`
         *,
@@ -179,10 +279,9 @@ router.get('/:id', requireAuth, async (req, res) => {
       .single();
 
     if (error || !ticket) {
-      return res.status(404).send('Ticket no encontrado');
+      return res.status(404).send('Ticket no encontrado.');
     }
 
-    // Validar propietario del ticket
     if (
       req.user.role === 'user' &&
       ticket.solicitante_id !== req.user.id
@@ -199,15 +298,13 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al consultar ticket:', err);
-
     res.status(500).send('Error al consultar el ticket');
   }
 });
 
-
 // =====================================================
 // ACTUALIZAR TICKET
-// SOLO ADMINISTRADORES Y TÉCNICOS
+// ADMINISTRADORES Y TÉCNICOS
 // =====================================================
 
 router.post(
@@ -215,7 +312,6 @@ router.post(
   requireAuth,
   requireAdmin,
   async (req, res) => {
-
     try {
       const supabase = req.supabase;
 
@@ -228,21 +324,15 @@ router.post(
 
       const ticketId = req.params.id;
 
-      // Validar estado
       if (!estadosPermitidos.includes(estado)) {
         return res.status(400).send('Estado no válido.');
       }
 
-      // Validar prioridad
       if (!prioridadesPermitidas.includes(prioridad)) {
         return res.status(400).send('Prioridad no válida.');
       }
 
-      // Consultar ticket actual
-      const {
-        data: actual,
-        error: consultaError
-      } = await supabase
+      const { data: actual, error: consultaError } = await supabase
         .from('tickets')
         .select('id, fecha_atencion, fecha_resolucion')
         .eq('id', ticketId)
@@ -252,46 +342,36 @@ router.post(
         return res.status(404).send('Ticket no encontrado.');
       }
 
-      // Preparar actualización
       const updates = {
         estado,
         prioridad,
-        observaciones: observaciones || null,
+        observaciones: observaciones
+          ? observaciones.trim()
+          : null,
         updated_at: new Date().toISOString()
       };
 
-      // Asignar técnico si se proporcionó uno
       if (tecnico_asignado_id !== undefined) {
         updates.tecnico_asignado_id =
           tecnico_asignado_id || null;
       }
 
-      // Registrar primera fecha de atención
       if (
         estado === 'en_proceso' &&
         !actual.fecha_atencion
       ) {
-        updates.fecha_atencion =
-          new Date().toISOString();
+        updates.fecha_atencion = new Date().toISOString();
       }
 
-      // Registrar fecha de resolución
-      if (
-        estado === 'resuelto' ||
-        estado === 'cerrado'
-      ) {
+      if (['resuelto', 'cerrado'].includes(estado)) {
         if (!actual.fecha_resolucion) {
-          updates.fecha_resolucion =
-            new Date().toISOString();
+          updates.fecha_resolucion = new Date().toISOString();
         }
       } else {
         updates.fecha_resolucion = null;
       }
 
-      // Guardar cambios
-      const {
-        error: updateError
-      } = await supabase
+      const { error: updateError } = await supabase
         .from('tickets')
         .update(updates)
         .eq('id', ticketId);
@@ -302,7 +382,6 @@ router.post(
 
     } catch (err) {
       console.error('Error al actualizar ticket:', err);
-
       res.status(500).send('Error al actualizar el ticket');
     }
   }

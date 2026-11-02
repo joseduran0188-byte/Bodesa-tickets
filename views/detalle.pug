@@ -1,69 +1,144 @@
+
 extends layout
 
 block content
-.page-header
+  .page-header
     h2= ticket.titulo
     a.btn.btn-secondary(href="/tickets") ← Volver
 
-.detail-grid
+  .detail-grid
     .detail-card
-    h3 Información de la solicitud
-    .detail-item
+      h3 Información de la solicitud
+
+      .detail-item
         strong Estado:
         span(class=`badge badge-estado-${ticket.estado}`)= ticket.estado
-    .detail-item
+
+      .detail-item
         strong Prioridad:
         span(class=`badge badge-${ticket.prioridad}`)= ticket.prioridad
-    .detail-item
+
+      .detail-item
         strong Categoría:
         span= ticket.categoria || '—'
-    .detail-item
+
+      .detail-item
         strong Solicitante:
         span= ticket.solicitante ? ticket.solicitante.full_name : '—'
-    .detail-item
+
+      .detail-item
         strong Técnico asignado:
         span= ticket.tecnico ? ticket.tecnico.full_name : 'Sin asignar'
-    .detail-item
+
+      .detail-item
         strong Fecha de creación:
         span= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
-    .detail-item
+
+      .detail-item
         strong Fecha de atención:
-        span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : '—'
-    .detail-item
+        span= ticket.fecha_atencion
+          ? new Date(ticket.fecha_atencion).toLocaleString('es-MX')
+          : '—'
+
+      .detail-item
         strong Fecha de resolución:
-        span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : '—'
+        span= ticket.fecha_resolucion
+          ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX')
+          : '—'
 
     .detail-card
-    h3 Descripción
-    p.descripcion= ticket.descripcion
+      h3 Descripción
 
-    if ticket.observaciones
+      p.descripcion= ticket.descripcion
+
+      //- Propietario, administrador o técnico pueden editar
+      if ticket.solicitante_id === user.id || ['admin', 'tecnico'].includes(user.role)
+        details.edit-description
+          summary.btn.btn-secondary Editar descripción
+
+          form(
+            method="POST"
+            action=`/tickets/${ticket.id}/editar-descripcion`
+          )
+            .form-group
+              label(for="descripcion") Nueva descripción
+
+              textarea#descripcion(
+                name="descripcion"
+                rows="6"
+                maxlength="5000"
+                required
+              )= ticket.descripcion
+
+            .form-actions
+              button.btn.btn-primary(type="submit")
+                | Guardar descripción
+
+      if ticket.observaciones
         h4 Observaciones
         p= ticket.observaciones
 
-if user.role === 'admin' || user.role === 'tecnico'
+  //- Formulario de administración y soporte
+  if user.role === 'admin' || user.role === 'tecnico'
     .form-card
-    h3 Actualizar ticket
-    form(method="POST" action=`/tickets/${ticket.id}/actualizar`)
+      h3 Actualizar ticket
+
+      form(
+        method="POST"
+        action=`/tickets/${ticket.id}/actualizar`
+      )
         .form-row
-        .form-group
+          .form-group
             label(for="estado") Estado
-            select#estado(name="estado")
-            option(value="pendiente" selected=ticket.estado==='pendiente') Pendiente
-            option(value="en_proceso" selected=ticket.estado==='en_proceso') En proceso
-            option(value="resuelto" selected=ticket.estado==='resuelto') Resuelto
-            option(value="cerrado" selected=ticket.estado==='cerrado') Cerrado
 
-        .form-group
+            select#estado(name="estado" required)
+              option(
+                value="pendiente"
+                selected=ticket.estado === 'pendiente'
+              ) Pendiente
+
+              option(
+                value="en_proceso"
+                selected=ticket.estado === 'en_proceso'
+              ) En proceso
+
+              option(
+                value="resuelto"
+                selected=ticket.estado === 'resuelto'
+              ) Resuelto
+
+              option(
+                value="cerrado"
+                selected=ticket.estado === 'cerrado'
+              ) Cerrado
+
+          .form-group
             label(for="prioridad") Prioridad
-            select#prioridad(name="prioridad")
-            option(value="baja" selected=ticket.prioridad==='baja') Baja
-            option(value="media" selected=ticket.prioridad==='media') Media
-            option(value="alta" selected=ticket.prioridad==='alta') Alta
+
+            select#prioridad(name="prioridad" required)
+              option(
+                value="baja"
+                selected=ticket.prioridad === 'baja'
+              ) Baja
+
+              option(
+                value="media"
+                selected=ticket.prioridad === 'media'
+              ) Media
+
+              option(
+                value="alta"
+                selected=ticket.prioridad === 'alta'
+              ) Alta
 
         .form-group
-        label(for="observaciones") Observaciones / Notas del técnico
-        textarea#observaciones(name="observaciones" rows="3")= ticket.observaciones || ''
+          label(for="observaciones") Observaciones / Notas del técnico
+
+          textarea#observaciones(
+            name="observaciones"
+            rows="3"
+          )= ticket.observaciones || ''
 
         .form-actions
-        button.btn.btn-primary(type="submit") Guardar cambios
+          button.btn.btn-primary(type="submit")
+            | Guardar cambios

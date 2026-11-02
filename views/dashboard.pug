@@ -1,36 +1,31 @@
-extends layout
 
-block content
-  .page-header
-    h2 Dashboard de Solicitudes
-    a.btn.btn-primary(href="/tickets/nuevo") + Nueva Solicitud
+td.actions
+  //- Ver ticket
+  a.action-btn(
+    href=`/tickets/${ticket.id}`
+    title="Ver ticket"
+    aria-label="Ver ticket"
+  )
+    i(class="fa-solid fa-eye")
 
-  if tickets.length === 0
-    .empty-state
-      p No hay solicitudes registradas.
-      a.btn.btn-primary(href="/tickets/nuevo") Crear la primera
-  else
-    .tickets-table-wrapper
-      table.tickets-table
-        thead
-          tr
-            th Prioridad
-            th Título
-            th Estado
-            th Solicitante
-            th Técnico
-            th Fecha creación
-            th Acciones
-        tbody
-          each ticket in tickets
-            tr
-              td
-                span(class=`badge badge-${ticket.prioridad}`)= ticket.prioridad
-              td= ticket.titulo
-              td
-                span(class=`badge badge-estado-${ticket.estado}`)= ticket.estado
-              td= ticket.solicitante ? ticket.solicitante.full_name : '—'
-              td= ticket.tecnico ? ticket.tecnico.full_name : 'Sin asignar'
-              td= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
-              td
-                a.btn.btn-sm(href=`/tickets/${ticket.id}`) Ver
+  //- Editar descripción
+  a.action-btn(
+    href=`/tickets/${ticket.id}`
+    title="Editar ticket"
+    aria-label="Editar ticket"
+  )
+    i(class="fa-solid fa-pen-to-square")
+
+  //- Eliminar ticket: solamente administrador
+  if user.role === 'admin'
+    form(
+      method="POST"
+      action=`/tickets/${ticket.id}/eliminar`
+      onsubmit="return confirm('¿Estás seguro de eliminar este ticket? Esta acción no se puede deshacer.');"
+    )
+      button.action-btn.action-delete(
+        type="submit"
+        title="Eliminar ticket"
+        aria-label="Eliminar ticket"
+      )
+        i(class="fa-solid fa-trash")
