@@ -30,7 +30,7 @@ block content
             th Título
             th Estado
             th Solicitante
-            th Técnico
+            th.responsable-column Responsable de atención
             th Fecha de creación
             th.actions-heading Acciones
 
@@ -58,12 +58,12 @@ block content
                 else
                   | —
 
-              //- Técnico
-              td
-                if ticket.tecnico && ticket.tecnico.full_name
-                  = ticket.tecnico.full_name
+              //- Responsable de atención
+              td.responsable-column
+                if ticket.responsable
+                  = ticket.responsable
                 else
-                  | Sin asignar
+                  span.text-muted Sin asignar
 
               //- Fecha de creación (horario de Colima, México)
               td.ticket-date
