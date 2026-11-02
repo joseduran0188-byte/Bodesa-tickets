@@ -83,35 +83,41 @@ function crearModuloTickets(rol) {
         throw new Error(`Rol de módulo no válido: ${rol}`);
     }
 
-    // IMPORTANTE:
-    // mergeParams permite recuperar sessionToken
-    // desde la ruta principal de Express.
+    // Recuperar sessionToken desde la ruta principal.
     const router = express.Router({
         mergeParams: true
     });
 
-    // Autenticación y autorización una sola vez.
+    // Autenticación y autorización.
     router.use(requireAuth, modulo.middleware);
+
+    // ========================================
+    // FUNCIONES AUXILIARES DE RUTAS
+    // ========================================
 
     function obtenerBase(req) {
         return `/sesion/${encodeURIComponent(req.params.sessionToken)}${modulo.base}`;
     }
 
     function rutaDetalle(req, id) {
-        return `${obtenerBase(req)}/${id}`;
+        return `${obtenerBase(req)}/${encodeURIComponent(id)}`;
     }
 
     function renderData(req, adicionales = {}) {
+        const base = obtenerBase(req);
+
         return {
             user: req.user,
             sessionToken: req.params.sessionToken,
-            dashboardUrl: obtenerBase(req),
+            dashboardUrl: base,
+            nuevoTicketUrl: rol === 'user' ? `${base}/nuevo` : null,
+            logoutUrl: `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
             ...adicionales
         };
     }
 
     // ========================================
-    // PANEL DE TICKETS
+    // PANEL PRINCIPAL
     // ========================================
 
     router.get('/', async (req, res) => {
@@ -121,6 +127,7 @@ function crearModuloTickets(rol) {
                 .select('*')
                 .order('created_at', { ascending: false });
 
+            // El usuario únicamente consulta sus tickets.
             if (rol === 'user') {
                 query = query.eq('solicitante_id', req.user.id);
             }
@@ -222,7 +229,7 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                return res.redirect(obtenerBase(req));
+                return res.redirect(303, obtenerBase(req));
 
             } catch (error) {
                 console.error('ERROR AL CREAR TICKET:', error);
@@ -235,7 +242,7 @@ function crearModuloTickets(rol) {
     }
 
     // ========================================
-    // CONSULTAR DETALLE DE TICKET
+    // CONSULTAR DETALLE
     // ========================================
 
     router.get('/:id', async (req, res) => {
@@ -360,10 +367,7 @@ function crearModuloTickets(rol) {
                 );
             }
 
-            // ------------------------------------
-            // ACTUALIZACIÓN DE USUARIO MEDIANTE RPC
-            // ------------------------------------
-
+            // Actualización del usuario mediante RPC.
             if (rol === 'user') {
                 const { error } = await req.supabase.rpc(
                     'update_own_ticket',
@@ -385,14 +389,12 @@ function crearModuloTickets(rol) {
                 }
 
                 return res.redirect(
+                    303,
                     rutaDetalle(req, ticket.id)
                 );
             }
 
-            // ------------------------------------
-            // ACTUALIZACIÓN DE TÉCNICO Y ADMIN
-            // ------------------------------------
-
+            // Actualización de técnico y administrador.
             const estado = limpiar(req.body.estado);
             const prioridad = limpiar(req.body.prioridad);
             const responsable = limpiar(req.body.responsable);
@@ -457,6 +459,7 @@ function crearModuloTickets(rol) {
             }
 
             return res.redirect(
+                303,
                 rutaDetalle(req, ticket.id)
             );
 
@@ -518,7 +521,7 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                return res.redirect(obtenerBase(req));
+                return res.redirect(303, obtenerBase(req));
 
             } catch (error) {
                 console.error('ERROR AL ELIMINAR:', error);

@@ -1,71 +1,52 @@
 
 const express = require('express');
-const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
+
+const {
+    createTabSession,
+    deleteTabSession
+} = require('../lib/session-manager');
+
+const router = express.Router();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/'
-};
-
-// ============================================
-// CLIENTE SUPABASE INDEPENDIENTE
-// ============================================
-
-function crearSupabase(token = null) {
-    const options = {
+function crearClienteSupabase() {
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
             autoRefreshToken: false,
             persistSession: false,
             detectSessionInUrl: false
         }
-    };
-
-    if (token) {
-        options.global = {
-            headers: {
-                Authorization: `Bearer ${token}`
-            }
-        };
-    }
-
-    return createClient(
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY,
-        options
-    );
+    });
 }
 
-// ============================================
-// REDIRECCIÓN SEGÚN ROL
-// ============================================
+function obtenerRutaPorRol(role, token) {
+    const base = `/sesion/${encodeURIComponent(token)}`;
 
-function rutaSegunRol(role) {
     const rutas = {
-        admin: '/admin/tickets',
-        tecnico: '/tecnico/tickets',
-        user: '/usuario/tickets'
+        admin: `${base}/admin/tickets`,
+        tecnico: `${base}/tecnico/tickets`,
+        user: `${base}/usuario/tickets`
     };
 
     return rutas[role] || '/login';
 }
 
-// ============================================
-// LOGIN
-// ============================================
-
+// Mostrar login
 router.get('/login', (req, res) => {
-    return res.render('login', {
+    res.setHeader('Cache-Control', 'no-store, private');
+
+    res.render('login', {
         title: 'Iniciar sesión',
-        error: null
+        error: req.query.expired
+            ? 'Tu sesión expiró. Inicia sesión nuevamente.'
+            : null
     });
 });
 
+// Procesar login
 router.post('/login', async (req, res) => {
     try {
         const email = typeof req.body.email === 'string'
@@ -83,115 +64,108 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        const supabase = crearSupabase();
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Faltan SUPABASE_URL o SUPABASE_ANON_KEY.');
+        }
 
-        // Autenticar usuario.
+        const supabase = crearClienteSupabase();
+
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password
         });
 
-        if (error || !data.session || !data.user) {
+        if (error || !data.user || !data.session) {
             return res.status(401).render('login', {
                 title: 'Iniciar sesión',
                 error: 'Correo o contraseña incorrectos.'
             });
         }
 
-        const token = data.session.access_token;
+        // Cliente exclusivo para consultar el perfil autenticado.
+        const supabaseUsuario = createClient(
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY,
+            {
+                global: {
+                    headers: {
+                        Authorization: `Bearer ${data.session.access_token}`
+                    }
+                },
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false,
+                    detectSessionInUrl: false
+                }
+            }
+        );
 
-        // Consultar el perfil con la sesión autenticada.
-        const supabaseUser = crearSupabase(token);
-
-        const { data: profile, error: profileError } = await supabaseUser
+        const { data: perfil, error: errorPerfil } = await supabaseUsuario
             .from('profiles')
-            .select('id, role')
+            .select('id, email, full_name, role, departamento')
             .eq('id', data.user.id)
             .single();
 
         const rolesPermitidos = ['admin', 'tecnico', 'user'];
 
         if (
-            profileError ||
-            !profile ||
-            profile.id !== data.user.id ||
-            !rolesPermitidos.includes(profile.role)
+            errorPerfil ||
+            !perfil ||
+            perfil.id !== data.user.id ||
+            !rolesPermitidos.includes(perfil.role)
         ) {
-            await supabaseUser.auth.signOut();
-
+            // No ejecutar signOut global: podría afectar otras sesiones
+            // de la misma cuenta abiertas en otras pestañas.
             return res.status(403).render('login', {
                 title: 'Iniciar sesión',
-                error: 'La cuenta no tiene un perfil o rol válido.'
+                error: 'La cuenta no tiene un perfil o rol autorizado.'
             });
         }
 
-        // Guardar token de acceso.
-        res.cookie(
-            'sb-access-token',
-            token,
-            {
-                ...cookieOptions,
-                maxAge: data.session.expires_in * 1000
-            }
+        // Crear una sesión independiente para esta pestaña.
+        const nuevaSesion = await createTabSession(
+            data.user.id,
+            perfil.role,
+            data.session
         );
 
-        console.log('LOGIN CORRECTO:', {
-            email: data.user.email,
-            userId: data.user.id,
-            role: profile.role,
-            destination: rutaSegunRol(profile.role)
-        });
-
-        // Enviar al módulo correspondiente.
-        return res.redirect(rutaSegunRol(profile.role));
+        return res.redirect(
+            303,
+            obtenerRutaPorRol(perfil.role, nuevaSesion.token)
+        );
 
     } catch (error) {
-        console.error('ERROR EN LOGIN:', error);
+        console.error('ERROR EN LOGIN:', error.message);
 
         return res.status(500).render('login', {
             title: 'Iniciar sesión',
-            error: 'Ocurrió un error al iniciar sesión.'
+            error: 'Ocurrió un error al iniciar sesión. Inténtalo nuevamente.'
         });
     }
 });
 
-// ============================================
-// LOGOUT
-// ============================================
-
-router.post('/logout', async (req, res) => {
+// Cerrar solamente la sesión de esta pestaña.
+router.post('/sesion/:sessionToken/logout', async (req, res) => {
     try {
-        const token = req.cookies?.['sb-access-token'];
+        const token = req.params.sessionToken;
 
-        if (token) {
-            const supabaseUser = crearSupabase(token);
-
-            const { error } = await supabaseUser.auth.signOut();
-
-            if (error) {
-                console.error(
-                    'ERROR AL CERRAR SESIÓN EN SUPABASE:',
-                    error.message
-                );
-            }
+        if (
+            typeof token !== 'string' ||
+            !/^[A-Za-z0-9_-]{40,100}$/.test(token)
+        ) {
+            return res.redirect('/login');
         }
 
-        res.clearCookie('sb-access-token', {
-            ...cookieOptions,
-            maxAge: undefined
-        });
+        await deleteTabSession(token);
 
-        return res.redirect('/login');
+        return res.redirect(303, '/login');
 
     } catch (error) {
-        console.error('ERROR EN LOGOUT:', error);
+        console.error('ERROR EN LOGOUT:', error.message);
 
-        res.clearCookie('sb-access-token', {
-            ...cookieOptions,
-            maxAge: undefined
-        });
-
-        return res.redirect('/login');
+        return res.status(500).send(
+            'No se pudo cerrar la sesión. Inténtalo nuevamente.'
+        );
     }
 });
 

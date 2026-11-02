@@ -12,31 +12,71 @@ const usuarioRoutes = require('./routes/usuario');
 
 const app = express();
 
+// ========================================
+// CONFIGURACIÓN GENERAL
+// ========================================
+
 app.set('trust proxy', 1);
 app.set('view engine', 'pug');
 app.set('views', path.join(__dirname, 'views'));
 
-app.use(helmet({
-    contentSecurityPolicy: false
+// ========================================
+// SEGURIDAD HTTP
+// ========================================
+
+app.use(
+    helmet({
+        contentSecurityPolicy: false
+    })
+);
+
+// ========================================
+// PROCESAMIENTO DE SOLICITUDES
+// ========================================
+
+app.use(express.urlencoded({
+    extended: true,
+    limit: '1mb'
 }));
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.json({
+    limit: '1mb'
+}));
+
+// ========================================
+// EVITAR CACHÉ DE INFORMACIÓN PRIVADA
+// ========================================
 
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, private');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.setHeader('Referrer-Policy', 'no-referrer');
+
     next();
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+// ========================================
+// ARCHIVOS ESTÁTICOS
+// ========================================
 
-// Autenticación
+app.use(
+    express.static(path.join(__dirname, 'public'), {
+        etag: true,
+        maxAge: '1h'
+    })
+);
+
+// ========================================
+// AUTENTICACIÓN
+// ========================================
+
 app.use('/', authRoutes);
 
-// Módulos con contexto independiente por pestaña
+// ========================================
+// MÓDULOS CON SESIÓN INDEPENDIENTE
+// ========================================
+
 app.use(
     '/sesion/:sessionToken/admin/tickets',
     adminRoutes
@@ -52,19 +92,41 @@ app.use(
     usuarioRoutes
 );
 
+// ========================================
+// RUTA PRINCIPAL
+// ========================================
+
 app.get('/', (req, res) => {
     res.redirect('/login');
 });
+
+// ========================================
+// RUTA NO ENCONTRADA
+// ========================================
 
 app.use((req, res) => {
     res.status(404).send('Página no encontrada.');
 });
 
+// ========================================
+// MANEJO GENERAL DE ERRORES
+// ========================================
+
 app.use((err, req, res, next) => {
     console.error('ERROR GENERAL:', err);
 
-    res.status(500).send('Ocurrió un error interno.');
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    res.status(500).send(
+        'Ocurrió un error interno en el servidor.'
+    );
 });
+
+// ========================================
+// INICIAR SERVIDOR LOCAL
+// ========================================
 
 if (require.main === module) {
     const PORT = process.env.PORT || 3000;

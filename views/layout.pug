@@ -5,7 +5,9 @@ html(lang="es")
         meta(charset="UTF-8")
         meta(name="viewport" content="width=device-width, initial-scale=1.0")
 
-        title Bodesa TI - Gestión de Solicitudes
+        meta(name="referrer" content="no-referrer")
+
+        title= title || 'Bodesa TI - Gestión de Solicitudes'
 
         //- Hoja de estilos del proyecto
         link(rel="stylesheet" href="/css/style.css")
@@ -26,25 +28,21 @@ html(lang="es")
                         span Sistema de Solicitudes
 
                     nav
-                        a(href="/tickets")
+                        a(href=dashboardUrl)
                             i.fa-solid.fa-house
                             |  Dashboard
 
-                        if user.role === 'admin' || user.role === 'tecnico'
-                            a(href="/export/excel")
-                                i.fa-solid.fa-file-excel
-                                |  Exportar Excel
-
-                        a(href="/tickets/nuevo")
-                            i.fa-solid.fa-plus
-                            |  Nueva Solicitud
+                        if user.role === 'user'
+                            a(href=nuevoTicketUrl)
+                                i.fa-solid.fa-plus
+                                |  Nueva Solicitud
 
                         .user-info
                             span #{user.full_name || user.email}
                             span.role (#{user.role})
 
-                            //- Cierre de sesión mediante POST
-                            form(action="/logout" method="POST")
+                            //- Cierre de sesión únicamente de esta pestaña
+                            form(action=logoutUrl method="POST")
                                 button.btn-logout(type="submit")
                                     i.fa-solid.fa-right-from-bracket
                                     |  Salir
