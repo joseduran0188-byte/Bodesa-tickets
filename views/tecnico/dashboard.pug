@@ -54,18 +54,18 @@ block content
                                 td.actions
                                     .action-buttons
                                         a.action-btn.action-view(
-                                            href='/tecnico/tickets/' + ticket.id
+                                            href=dashboardUrl + '/' + ticket.id
                                             title='Ver ticket'
                                         )
                                             i.fa-solid.fa-eye
                                             span Ver
 
                                         a.action-btn.action-edit(
-                                            href='/tecnico/tickets/' + ticket.id + '?editar=1'
+                                            href=dashboardUrl + '/' + ticket.id + '?editar=1'
                                             title='Atender ticket'
                                         )
                                             i.fa-solid.fa-pen-to-square
-                                            span Editar
+                                            span Atender
 
         else
             .empty-state

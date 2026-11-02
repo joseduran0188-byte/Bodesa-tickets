@@ -5,16 +5,12 @@ block content
     .container
         .page-header
             div
-                h1 Mis solicitudes
+                h1 Panel de soporte técnico
                 p Bienvenido, #{user.full_name || user.email}
 
                 p
                     strong Tipo de cuenta:
-                    |  Usuario
-
-            a.btn.btn-primary(href='/usuario/tickets/nuevo')
-                i.fa-solid.fa-plus
-                |  Nuevo ticket
+                    |  Técnico de TI
 
         if tickets && tickets.length
             .tickets-table-wrapper
@@ -23,6 +19,7 @@ block content
                         tr
                             th Folio
                             th Solicitud
+                            th Solicitante
                             th Prioridad
                             th Estado
                             th Responsable
@@ -34,6 +31,7 @@ block content
                             tr
                                 td= ticket.id
                                 td.ticket-title= ticket.titulo
+                                td= ticket.nombre_solicitante || 'Sin nombre registrado'
 
                                 td
                                     - const prioridad = (ticket.prioridad || 'media').toLowerCase()
@@ -56,25 +54,21 @@ block content
                                 td.actions
                                     .action-buttons
                                         a.action-btn.action-view(
-                                            href='/usuario/tickets/' + ticket.id
+                                            href=dashboardUrl + '/' + ticket.id
                                             title='Ver ticket'
                                         )
                                             i.fa-solid.fa-eye
                                             span Ver
 
                                         a.action-btn.action-edit(
-                                            href='/usuario/tickets/' + ticket.id + '?editar=1'
-                                            title='Editar ticket'
+                                            href=dashboardUrl + '/' + ticket.id + '?editar=1'
+                                            title='Atender ticket'
                                         )
                                             i.fa-solid.fa-pen-to-square
-                                            span Editar
+                                            span Atender
 
         else
             .empty-state
                 i.fa-solid.fa-clipboard-list
                 h3 No hay tickets registrados
-                p Cuando registres una solicitud, aparecerá aquí.
-
-                a.btn.btn-primary(href='/usuario/tickets/nuevo')
-                    i.fa-solid.fa-plus
-                    |  Crear primer ticket
+                p Cuando se registren solicitudes, aparecerán aquí.

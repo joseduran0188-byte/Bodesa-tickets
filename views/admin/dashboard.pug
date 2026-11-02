@@ -54,21 +54,21 @@ block content
                                 td.actions
                                     .action-buttons
                                         a.action-btn.action-view(
-                                            href='/admin/tickets/' + ticket.id
+                                            href=dashboardUrl + '/' + ticket.id
                                             title='Ver ticket'
                                         )
                                             i.fa-solid.fa-eye
                                             span Ver
 
                                         a.action-btn.action-edit(
-                                            href='/admin/tickets/' + ticket.id + '?editar=1'
+                                            href=dashboardUrl + '/' + ticket.id + '?editar=1'
                                             title='Editar ticket'
                                         )
                                             i.fa-solid.fa-pen-to-square
                                             span Editar
 
                                         form.action-form(
-                                            action='/admin/tickets/' + ticket.id + '/eliminar'
+                                            action=dashboardUrl + '/' + ticket.id + '/eliminar'
                                             method='POST'
                                             onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
                                         )
