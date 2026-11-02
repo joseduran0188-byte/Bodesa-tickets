@@ -13,12 +13,15 @@ block content
                     strong Tipo de cuenta:
                     |  Administrador
 
-            a.btn.btn-secondary(href='/tickets')
+            a.btn.btn-secondary(href='/admin/tickets')
                 i.fa-solid.fa-arrow-left
                 |  Volver al panel
 
         .ticket-detail-card
-            form(action='/tickets/' + ticket.id + '/actualizar' method='POST')
+            form(
+                action='/admin/tickets/' + ticket.id + '/actualizar'
+                method='POST'
+            )
                 .form-group
                     label(for='nombre_solicitante') Nombre del solicitante
                     input#nombre_solicitante(

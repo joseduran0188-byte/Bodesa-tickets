@@ -4,7 +4,7 @@ extends ../layout
 block content
   .page-header
     h2= `Atención del ticket #${ticket.id.substring(0, 8)}`
-    a.btn.btn-secondary(href="/tickets")
+    a.btn.btn-secondary(href="/tecnico/tickets")
       i.fa-solid.fa-arrow-left
       |  Volver al panel
 
@@ -26,7 +26,7 @@ block content
   .form-card
     h3 Actualizar atención técnica
 
-    form(method="POST" action=`/tickets/${ticket.id}/actualizar`)
+    form(method="POST" action=`/tecnico/tickets/${ticket.id}/actualizar`)
       input(type="hidden" name="nombre_solicitante" value=ticket.nombre_solicitante || '')
       input(type="hidden" name="titulo" value=ticket.titulo)
       input(type="hidden" name="descripcion" value=ticket.descripcion)
@@ -61,5 +61,5 @@ block content
         button.btn.btn-primary(type="submit")
           i.fa-solid.fa-floppy-disk
           |  Guardar atención
-        a.btn.btn-secondary(href="/tickets")
+        a.btn.btn-secondary(href="/tecnico/tickets")
           | Cancelar

@@ -12,10 +12,6 @@ block content
                     strong Tipo de cuenta:
                     |  Administrador
 
-            a.btn.btn-primary(href='/tickets/nuevo')
-                i.fa-solid.fa-plus
-                |  Nuevo ticket
-
         if tickets && tickets.length
             .tickets-table-wrapper
                 table.tickets-table
@@ -58,21 +54,21 @@ block content
                                 td.actions
                                     .action-buttons
                                         a.action-btn.action-view(
-                                            href='/tickets/' + ticket.id
+                                            href='/admin/tickets/' + ticket.id
                                             title='Ver ticket'
                                         )
                                             i.fa-solid.fa-eye
                                             span Ver
 
                                         a.action-btn.action-edit(
-                                            href='/tickets/' + ticket.id + '?editar=1'
+                                            href='/admin/tickets/' + ticket.id + '?editar=1'
                                             title='Editar ticket'
                                         )
                                             i.fa-solid.fa-pen-to-square
                                             span Editar
 
                                         form.action-form(
-                                            action='/tickets/' + ticket.id + '/eliminar'
+                                            action='/admin/tickets/' + ticket.id + '/eliminar'
                                             method='POST'
                                             onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
                                         )
@@ -87,8 +83,4 @@ block content
             .empty-state
                 i.fa-solid.fa-clipboard-list
                 h3 No hay tickets registrados
-                p Cuando registres una solicitud, aparecerá aquí.
-
-                a.btn.btn-primary(href='/tickets/nuevo')
-                    i.fa-solid.fa-plus
-                    |  Crear primer ticket
+                p Cuando los usuarios registren solicitudes, aparecerán aquí.

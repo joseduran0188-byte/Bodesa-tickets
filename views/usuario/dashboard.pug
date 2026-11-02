@@ -12,7 +12,7 @@ block content
                     strong Tipo de cuenta:
                     |  Usuario
 
-            a.btn.btn-primary(href='/tickets/nuevo')
+            a.btn.btn-primary(href='/usuario/tickets/nuevo')
                 i.fa-solid.fa-plus
                 |  Nuevo ticket
 
@@ -56,14 +56,14 @@ block content
                                 td.actions
                                     .action-buttons
                                         a.action-btn.action-view(
-                                            href='/tickets/' + ticket.id
+                                            href='/usuario/tickets/' + ticket.id
                                             title='Ver ticket'
                                         )
                                             i.fa-solid.fa-eye
                                             span Ver
 
                                         a.action-btn.action-edit(
-                                            href='/tickets/' + ticket.id + '?editar=1'
+                                            href='/usuario/tickets/' + ticket.id + '?editar=1'
                                             title='Editar ticket'
                                         )
                                             i.fa-solid.fa-pen-to-square
@@ -75,6 +75,6 @@ block content
                 h3 No hay tickets registrados
                 p Cuando registres una solicitud, aparecerá aquí.
 
-                a.btn.btn-primary(href='/tickets/nuevo')
+                a.btn.btn-primary(href='/usuario/tickets/nuevo')
                     i.fa-solid.fa-plus
                     |  Crear primer ticket

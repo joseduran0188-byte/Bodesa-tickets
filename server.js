@@ -7,7 +7,9 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 
 const authRoutes = require('./routes/auth');
-const ticketRoutes = require('./routes/tickets');
+const adminRoutes = require('./routes/admin');
+const tecnicoRoutes = require('./routes/tecnico');
+const usuarioRoutes = require('./routes/usuario');
 
 const app = express();
 
@@ -28,26 +30,37 @@ app.use((req, res, next) => {
         'Cache-Control',
         'no-store, no-cache, must-revalidate, private'
     );
+
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
+
     next();
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Autenticación
 app.use('/', authRoutes);
-app.use('/tickets', ticketRoutes);
 
+// Módulos independientes por rol
+app.use('/admin', adminRoutes);
+app.use('/tecnico', tecnicoRoutes);
+app.use('/usuario', usuarioRoutes);
+
+// Ruta principal
 app.get('/', (req, res) => {
-    res.redirect('/tickets');
+    res.redirect('/login');
 });
 
+// Página no encontrada
 app.use((req, res) => {
     res.status(404).send('Página no encontrada.');
 });
 
+// Manejo de errores
 app.use((err, req, res, next) => {
     console.error('Error general:', err);
+
     res.status(500).send('Ocurrió un error interno.');
 });
 

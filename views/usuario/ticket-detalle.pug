@@ -4,7 +4,7 @@ extends ../layout
 block content
   .page-header
     h2= `Mi solicitud #${ticket.id.substring(0, 8)}`
-    a.btn.btn-secondary(href="/tickets")
+    a.btn.btn-secondary(href="/usuario/tickets")
       i.fa-solid.fa-arrow-left
       |  Volver a mis solicitudes
 
@@ -35,18 +35,35 @@ block content
     h3 Información de mi solicitud
 
     if editarTicket
-      form(method="POST" action=`/tickets/${ticket.id}/actualizar`)
+      form(method="POST" action=`/usuario/tickets/${ticket.id}/actualizar`)
         .form-group
           label(for="nombre_solicitante") Nombre del solicitante
-          input#nombre_solicitante(type="text" name="nombre_solicitante" maxlength="150" value=ticket.nombre_solicitante || '' required)
+          input#nombre_solicitante(
+            type="text"
+            name="nombre_solicitante"
+            maxlength="150"
+            value=ticket.nombre_solicitante || ''
+            required
+          )
 
         .form-group
           label(for="titulo") Título
-          input#titulo(type="text" name="titulo" maxlength="200" value=ticket.titulo required)
+          input#titulo(
+            type="text"
+            name="titulo"
+            maxlength="200"
+            value=ticket.titulo
+            required
+          )
 
         .form-group
           label(for="descripcion") Descripción
-          textarea#descripcion(name="descripcion" rows="6" maxlength="5000" required)= ticket.descripcion
+          textarea#descripcion(
+            name="descripcion"
+            rows="6"
+            maxlength="5000"
+            required
+          )= ticket.descripcion
 
         .form-group
           label(for="categoria") Categoría
@@ -63,7 +80,7 @@ block content
           button.btn.btn-primary(type="submit")
             i.fa-solid.fa-floppy-disk
             |  Guardar cambios
-          a.btn.btn-secondary(href=`/tickets/${ticket.id}`)
+          a.btn.btn-secondary(href=`/usuario/tickets/${ticket.id}`)
             | Cancelar
     else
       p
@@ -77,7 +94,7 @@ block content
         |  #{ticket.categoria || '—'}
       p.descripcion= ticket.descripcion
 
-      a.btn.btn-secondary(href=`/tickets/${ticket.id}?editar=1`)
+      a.btn.btn-secondary(href=`/usuario/tickets/${ticket.id}?editar=1`)
         i.fa-solid.fa-pen-to-square
         |  Editar mi solicitud
 

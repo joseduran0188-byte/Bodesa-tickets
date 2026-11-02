@@ -3,10 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
-);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 const cookieOptions = {
     httpOnly: true,
@@ -15,8 +13,54 @@ const cookieOptions = {
     path: '/'
 };
 
+// ============================================
+// CLIENTE SUPABASE INDEPENDIENTE
+// ============================================
+
+function crearSupabase(token = null) {
+    const options = {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false
+        }
+    };
+
+    if (token) {
+        options.global = {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        };
+    }
+
+    return createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        options
+    );
+}
+
+// ============================================
+// REDIRECCIÓN SEGÚN ROL
+// ============================================
+
+function rutaSegunRol(role) {
+    const rutas = {
+        admin: '/admin/tickets',
+        tecnico: '/tecnico/tickets',
+        user: '/usuario/tickets'
+    };
+
+    return rutas[role] || '/login';
+}
+
+// ============================================
+// LOGIN
+// ============================================
+
 router.get('/login', (req, res) => {
-    res.render('login', {
+    return res.render('login', {
         title: 'Iniciar sesión',
         error: null
     });
@@ -39,6 +83,9 @@ router.post('/login', async (req, res) => {
             });
         }
 
+        const supabase = crearSupabase();
+
+        // Autenticar usuario.
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password
@@ -51,18 +98,26 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        const { data: profile, error: profileError } = await supabase
+        const token = data.session.access_token;
+
+        // Consultar el perfil con la sesión autenticada.
+        const supabaseUser = crearSupabase(token);
+
+        const { data: profile, error: profileError } = await supabaseUser
             .from('profiles')
             .select('id, role')
             .eq('id', data.user.id)
             .single();
 
+        const rolesPermitidos = ['admin', 'tecnico', 'user'];
+
         if (
             profileError ||
             !profile ||
-            !['admin', 'tecnico', 'user'].includes(profile.role)
+            profile.id !== data.user.id ||
+            !rolesPermitidos.includes(profile.role)
         ) {
-            await supabase.auth.signOut();
+            await supabaseUser.auth.signOut();
 
             return res.status(403).render('login', {
                 title: 'Iniciar sesión',
@@ -70,21 +125,28 @@ router.post('/login', async (req, res) => {
             });
         }
 
+        // Guardar token de acceso.
         res.cookie(
             'sb-access-token',
-            data.session.access_token,
+            token,
             {
                 ...cookieOptions,
                 maxAge: data.session.expires_in * 1000
             }
         );
 
-        // Los tres roles llegan al enrutador central.
-        // Este selecciona el panel de acuerdo con el perfil real.
-        return res.redirect('/tickets');
+        console.log('LOGIN CORRECTO:', {
+            email: data.user.email,
+            userId: data.user.id,
+            role: profile.role,
+            destination: rutaSegunRol(profile.role)
+        });
+
+        // Enviar al módulo correspondiente.
+        return res.redirect(rutaSegunRol(profile.role));
 
     } catch (error) {
-        console.error('Error en login:', error);
+        console.error('ERROR EN LOGIN:', error);
 
         return res.status(500).render('login', {
             title: 'Iniciar sesión',
@@ -93,41 +155,42 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// ============================================
+// LOGOUT
+// ============================================
+
 router.post('/logout', async (req, res) => {
     try {
         const token = req.cookies?.['sb-access-token'];
 
         if (token) {
-            const supabaseUser = createClient(
-                process.env.SUPABASE_URL,
-                process.env.SUPABASE_ANON_KEY,
-                {
-                    global: {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        }
-                    },
-                    auth: {
-                        autoRefreshToken: false,
-                        persistSession: false
-                    }
-                }
-            );
+            const supabaseUser = crearSupabase(token);
 
             const { error } = await supabaseUser.auth.signOut();
 
             if (error) {
-                console.error('Error al cerrar sesión:', error.message);
+                console.error(
+                    'ERROR AL CERRAR SESIÓN EN SUPABASE:',
+                    error.message
+                );
             }
         }
 
-        res.clearCookie('sb-access-token', cookieOptions);
+        res.clearCookie('sb-access-token', {
+            ...cookieOptions,
+            maxAge: undefined
+        });
+
         return res.redirect('/login');
 
     } catch (error) {
-        console.error('Error en logout:', error);
+        console.error('ERROR EN LOGOUT:', error);
 
-        res.clearCookie('sb-access-token', cookieOptions);
+        res.clearCookie('sb-access-token', {
+            ...cookieOptions,
+            maxAge: undefined
+        });
+
         return res.redirect('/login');
     }
 });

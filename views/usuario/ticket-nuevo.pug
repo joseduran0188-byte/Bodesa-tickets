@@ -4,7 +4,7 @@ extends ../layout
 block content
   .page-header
     h2 Crear solicitud
-    a.btn.btn-secondary(href="/tickets")
+    a.btn.btn-secondary(href="/usuario/tickets")
       i.fa-solid.fa-arrow-left
       |  Volver
 
@@ -14,7 +14,7 @@ block content
     if error
       .alert.alert-danger= error
 
-    form(method="POST" action="/tickets/nuevo")
+    form(method="POST" action="/usuario/tickets/nuevo")
       .form-group
         label(for="nombre_solicitante") Nombre del solicitante
         input#nombre_solicitante(
@@ -68,5 +68,5 @@ block content
         button.btn.btn-primary(type="submit")
           i.fa-solid.fa-paper-plane
           |  Registrar solicitud
-        a.btn.btn-secondary(href="/tickets")
+        a.btn.btn-secondary(href="/usuario/tickets")
           | Cancelar
