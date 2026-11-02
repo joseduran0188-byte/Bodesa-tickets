@@ -3,15 +3,23 @@ extends layout
 
 block content
   .page-header
-    h2 Dashboard de Solicitudes
+    div
+      h2 Dashboard de Solicitudes
+      p.help-text Administración y seguimiento de solicitudes del departamento de TI.
+
     a.btn.btn-primary(href="/tickets/nuevo")
       i.fa-solid.fa-plus
       |  Nueva Solicitud
 
   if !tickets || tickets.length === 0
     .empty-state
-      p No hay solicitudes registradas.
-      a.btn.btn-primary(href="/tickets/nuevo") Crear la primera
+      i.fa-solid.fa-inbox
+      h3 No hay solicitudes registradas
+      p Todavía no existen solicitudes en el sistema.
+
+      a.btn.btn-primary(href="/tickets/nuevo")
+        i.fa-solid.fa-plus
+        |  Crear la primera solicitud
 
   else
     .tickets-table-wrapper
@@ -23,55 +31,72 @@ block content
             th Estado
             th Solicitante
             th Técnico
-            th Fecha creación
+            th Fecha de creación
             th Acciones
 
         tbody
           each ticket in tickets
             tr
+              //- Prioridad
               td
-                span(class=`badge badge-${ticket.prioridad}`)
-                  = ticket.prioridad
+                span(class='badge badge-' + ticket.prioridad)
+                  = ticket.prioridad || 'Sin prioridad'
 
-              td= ticket.titulo
-
+              //- Título
               td
-                span(class=`badge badge-estado-${ticket.estado}`)
-                  = ticket.estado
+                strong= ticket.titulo || 'Sin título'
 
-              td= ticket.solicitante
-                ? ticket.solicitante.full_name
-                : '—'
+              //- Estado
+              td
+                span(class='badge badge-estado-' + ticket.estado)
+                  = ticket.estado || 'Sin estado'
 
-              td= ticket.tecnico
-                ? ticket.tecnico.full_name
-                : 'Sin asignar'
+              //- Solicitante
+              td
+                if ticket.solicitante && ticket.solicitante.full_name
+                  = ticket.solicitante.full_name
+                else
+                  | —
 
-              td= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
+              //- Técnico
+              td
+                if ticket.tecnico && ticket.tecnico.full_name
+                  = ticket.tecnico.full_name
+                else
+                  | Sin asignar
 
-              //- ACCIONES
+              //- Fecha de creación
+              td
+                if ticket.fecha_creacion
+                  = new Date(ticket.fecha_creacion).toLocaleString('es-MX')
+                else
+                  | —
+
+              //- Acciones
               td.actions
                 //- Ver solicitud
                 a.action-btn(
-                  href=`/tickets/${ticket.id}`
+                  href='/tickets/' + ticket.id
                   title="Ver solicitud"
                   aria-label="Ver solicitud"
                 )
                   i.fa-solid.fa-eye
+                  span Ver
 
                 //- Editar descripción
                 a.action-btn(
-                  href=`/tickets/${ticket.id}#editar-descripcion`
+                  href='/tickets/' + ticket.id + '?editar=1#editar-descripcion'
                   title="Editar descripción"
                   aria-label="Editar descripción"
                 )
                   i.fa-solid.fa-pen-to-square
+                  span Editar
 
-                //- Eliminar: exclusivamente administrador
-                if user.role === 'admin'
+                //- Eliminar: solamente administrador
+                if user && user.role === 'admin'
                   form(
                     method="POST"
-                    action=`/tickets/${ticket.id}/eliminar`
+                    action='/tickets/' + ticket.id + '/eliminar'
                     onsubmit="return confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.');"
                   )
                     button.action-btn.action-delete(
@@ -80,3 +105,4 @@ block content
                       aria-label="Eliminar solicitud"
                     )
                       i.fa-solid.fa-trash
+                      span Eliminar
