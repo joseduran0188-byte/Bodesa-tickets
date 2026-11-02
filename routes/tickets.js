@@ -4,7 +4,8 @@ const router = express.Router();
 
 const {
   requireAuth,
-  requireAdmin
+  requireAdmin,
+  requireOnlyAdmin
 } = require('../middleware/auth');
 
 // =====================================================
@@ -25,20 +26,6 @@ const estadosPermitidos = [
   'resuelto',
   'cerrado'
 ];
-
-// =====================================================
-// MIDDLEWARE: SOLAMENTE ADMINISTRADORES
-// =====================================================
-
-function requireOnlyAdmin(req, res, next) {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).send(
-      'Acceso denegado. Solo los administradores pueden realizar esta acción.'
-    );
-  }
-
-  return next();
-}
 
 // =====================================================
 // LISTAR TICKETS
@@ -83,14 +70,14 @@ router.get('/', requireAuth, async (req, res) => {
         new Date(b.fecha_creacion);
     });
 
-    res.render('dashboard', {
+    return res.render('dashboard', {
       user: req.user,
       tickets: ticketsOrdenados
     });
 
   } catch (err) {
     console.error('Error al cargar tickets:', err);
-    res.status(500).send('Error al cargar los tickets.');
+    return res.status(500).send('Error al cargar los tickets.');
   }
 });
 
@@ -99,7 +86,7 @@ router.get('/', requireAuth, async (req, res) => {
 // =====================================================
 
 router.get('/nuevo', requireAuth, (req, res) => {
-  res.render('ticket-nuevo', {
+  return res.render('ticket-nuevo', {
     user: req.user
   });
 });
@@ -164,11 +151,11 @@ router.post('/nuevo', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    res.redirect('/tickets');
+    return res.redirect('/tickets');
 
   } catch (err) {
     console.error('Error al crear ticket:', err);
-    res.status(500).send('Error al crear el ticket.');
+    return res.status(500).send('Error al crear el ticket.');
   }
 });
 
@@ -202,13 +189,17 @@ router.post(
       }
 
       // Consultar el propietario del ticket.
-      const { data: ticket, error: consultaError } = await supabase
+      const {
+        data: ticket,
+        error: consultaError
+      } = await supabase
         .from('tickets')
         .select('id, solicitante_id')
         .eq('id', ticketId)
         .single();
 
       if (consultaError || !ticket) {
+        console.error('Error al consultar ticket:', consultaError);
         return res.status(404).send('Ticket no encontrado.');
       }
 
@@ -224,7 +215,10 @@ router.post(
         );
       }
 
-      const { data: actualizado, error: updateError } = await supabase
+      const {
+        data: actualizado,
+        error: updateError
+      } = await supabase
         .from('tickets')
         .update({
           descripcion: descripcion.trim(),
@@ -242,11 +236,12 @@ router.post(
         );
       }
 
-      res.redirect(`/tickets/${ticketId}`);
+      return res.redirect(`/tickets/${ticketId}`);
 
     } catch (err) {
       console.error('Error al editar descripción:', err);
-      res.status(500).send(
+
+      return res.status(500).send(
         'Error al actualizar la descripción del ticket.'
       );
     }
@@ -255,7 +250,7 @@ router.post(
 
 // =====================================================
 // ELIMINAR TICKET
-// SOLAMENTE ADMINISTRADORES
+// EXCLUSIVAMENTE ADMINISTRADORES
 // =====================================================
 
 router.post(
@@ -267,37 +262,75 @@ router.post(
       const supabase = req.supabase;
       const ticketId = req.params.id;
 
-      // Comprobar que el ticket existe.
-      const { data: ticket, error: consultaError } = await supabase
+      // Comprobar que el ticket existe y es visible
+      // para el usuario autenticado.
+      const {
+        data: ticket,
+        error: consultaError
+      } = await supabase
         .from('tickets')
         .select('id')
         .eq('id', ticketId)
-        .single();
+        .maybeSingle();
 
-      if (consultaError || !ticket) {
+      if (consultaError) {
+        console.error(
+          'Error al consultar ticket antes de eliminar:',
+          consultaError
+        );
+
+        throw consultaError;
+      }
+
+      if (!ticket) {
         return res.status(404).send('Ticket no encontrado.');
       }
 
-      // Eliminar ticket.
-      const { data: eliminados, error: deleteError } = await supabase
+      // Eliminar ticket utilizando el JWT del administrador.
+      // Supabase aplicará las políticas RLS.
+      const {
+        data: eliminados,
+        error: deleteError
+      } = await supabase
         .from('tickets')
         .delete()
         .eq('id', ticketId)
         .select('id');
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error('Error de Supabase al eliminar:', {
+          message: deleteError.message,
+          details: deleteError.details,
+          hint: deleteError.hint,
+          code: deleteError.code
+        });
 
+        throw deleteError;
+      }
+
+      // Si no se devolvieron filas, la eliminación no se confirmó.
       if (!eliminados || eliminados.length === 0) {
+        console.error(
+          'Supabase no eliminó filas. Revisa la política DELETE de RLS.'
+        );
+
         return res.status(403).send(
-          'No se pudo eliminar el ticket. Verifica las políticas de Supabase.'
+          'Supabase no permitió eliminar el ticket. Revisa la política DELETE de RLS.'
         );
       }
 
-      res.redirect('/tickets');
+      console.log(
+        `Ticket ${ticketId} eliminado por el administrador ${req.user.email}`
+      );
+
+      return res.redirect('/tickets');
 
     } catch (err) {
       console.error('Error al eliminar ticket:', err);
-      res.status(500).send('Error al eliminar el ticket.');
+
+      return res.status(500).send(
+        'Error al eliminar el ticket. Revisa la terminal del servidor.'
+      );
     }
   }
 );
@@ -310,7 +343,10 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const supabase = req.supabase;
 
-    const { data: ticket, error } = await supabase
+    const {
+      data: ticket,
+      error
+    } = await supabase
       .from('tickets')
       .select(`
         *,
@@ -326,6 +362,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       .single();
 
     if (error || !ticket) {
+      console.error('Error al consultar detalle:', error);
       return res.status(404).send('Ticket no encontrado.');
     }
 
@@ -339,7 +376,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       );
     }
 
-    res.render('ticket-detalle', {
+    return res.render('ticket-detalle', {
       user: req.user,
       ticket,
       editarDescripcion: req.query.editar === '1'
@@ -347,7 +384,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   } catch (err) {
     console.error('Error al consultar ticket:', err);
-    res.status(500).send('Error al consultar el ticket.');
+    return res.status(500).send('Error al consultar el ticket.');
   }
 });
 
@@ -391,13 +428,17 @@ router.post(
       }
 
       // Consultar ticket actual.
-      const { data: actual, error: consultaError } = await supabase
+      const {
+        data: actual,
+        error: consultaError
+      } = await supabase
         .from('tickets')
         .select('id, fecha_atencion, fecha_resolucion')
         .eq('id', ticketId)
         .single();
 
       if (consultaError || !actual) {
+        console.error('Error al consultar ticket:', consultaError);
         return res.status(404).send('Ticket no encontrado.');
       }
 
@@ -405,7 +446,7 @@ router.post(
       const updates = {
         estado,
         prioridad,
-        observaciones: observaciones
+        observaciones: typeof observaciones === 'string'
           ? observaciones.trim() || null
           : null,
         updated_at: new Date().toISOString()
@@ -441,11 +482,11 @@ router.post(
 
       if (updateError) throw updateError;
 
-      res.redirect(`/tickets/${ticketId}`);
+      return res.redirect(`/tickets/${ticketId}`);
 
     } catch (err) {
       console.error('Error al actualizar ticket:', err);
-      res.status(500).send('Error al actualizar el ticket.');
+      return res.status(500).send('Error al actualizar el ticket.');
     }
   }
 );
