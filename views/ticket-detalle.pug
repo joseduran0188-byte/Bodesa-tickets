@@ -1,69 +1,204 @@
+
 extends layout
 
 block content
   .page-header
-    h2= ticket.titulo
-    a.btn.btn-secondary(href="/tickets") ← Volver
+    .page-header-content
+      h1 Detalle de solicitud
+      p Consulta y administra la información de esta solicitud.
+
+    a.btn.btn-secondary(href='/tickets')
+      i.fas.fa-arrow-left
+      |  Regresar
 
   .detail-grid
+    // INFORMACIÓN GENERAL
     .detail-card
-      h3 Información de la solicitud
-      .detail-item
-        strong Estado:
-        span(class=`badge badge-estado-${ticket.estado}`)= ticket.estado
-      .detail-item
-        strong Prioridad:
-        span(class=`badge badge-${ticket.prioridad}`)= ticket.prioridad
-      .detail-item
-        strong Categoría:
-        span= ticket.categoria || '—'
-      .detail-item
-        strong Solicitante:
-        span= ticket.solicitante ? ticket.solicitante.full_name : '—'
-      .detail-item
-        strong Técnico asignado:
-        span= ticket.tecnico ? ticket.tecnico.full_name : 'Sin asignar'
-      .detail-item
-        strong Fecha de creación:
-        span= new Date(ticket.fecha_creacion).toLocaleString('es-MX')
-      .detail-item
-        strong Fecha de atención:
-        span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : '—'
-      .detail-item
-        strong Fecha de resolución:
-        span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : '—'
+      .detail-card-header
+        h2
+          i.fas.fa-info-circle
+          |  Información general
 
+      .detail-card-body
+        .detail-item
+          span.label Folio
+          span.value= ticket.id
+
+        .detail-item
+          span.label Estado
+          span.value
+            if ticket.estado === 'pendiente'
+              span.status.status-pending Pendiente
+            else if ticket.estado === 'en_proceso'
+              span.status.status-progress En proceso
+            else if ticket.estado === 'resuelto'
+              span.status.status-resolved Resuelto
+            else if ticket.estado === 'cerrado'
+              span.status.status-closed Cerrado
+            else
+              span= ticket.estado
+
+        .detail-item
+          span.label Prioridad
+          span.value
+            if ticket.prioridad === 'alta'
+              span.priority.priority-high Alta
+            else if ticket.prioridad === 'media'
+              span.priority.priority-medium Media
+            else if ticket.prioridad === 'baja'
+              span.priority.priority-low Baja
+            else
+              span= ticket.prioridad
+
+        .detail-item
+          span.label Categoría
+          span.value= ticket.categoria || 'Sin categoría'
+
+        .detail-item
+          span.label Solicitante
+          span.value
+            if ticket.solicitante && ticket.solicitante.full_name
+              = ticket.solicitante.full_name
+            else
+              | No disponible
+
+        .detail-item
+          span.label Correo del solicitante
+          span.value
+            if ticket.solicitante && ticket.solicitante.email
+              = ticket.solicitante.email
+            else
+              | No disponible
+
+        .detail-item
+          span.label Responsable de atención
+          span.value= ticket.responsable || 'Pendiente de asignación'
+
+        .detail-item
+          span.label Fecha de creación
+          span.value
+            if ticket.fecha_creacion
+              = new Date(ticket.fecha_creacion).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+            else
+              | —
+
+        .detail-item
+          span.label Fecha de atención
+          span.value
+            if ticket.fecha_atencion
+              = new Date(ticket.fecha_atencion).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+            else
+              | —
+
+        .detail-item
+          span.label Fecha de resolución
+          span.value
+            if ticket.fecha_resolucion
+              = new Date(ticket.fecha_resolucion).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+            else
+              | —
+
+    // DESCRIPCIÓN
     .detail-card
-      h3 Descripción
-      p.descripcion= ticket.descripcion
+      .detail-card-header
+        h2
+          i.fas.fa-align-left
+          |  Descripción de la solicitud
 
-      if ticket.observaciones
-        h4 Observaciones
-        p= ticket.observaciones
+      .detail-card-body
+        .descripcion
+          if ticket.descripcion
+            p= ticket.descripcion
+          else
+            p No hay una descripción registrada.
 
-  if user.role === 'admin' || user.role === 'tecnico'
-    .form-card
-      h3 Actualizar ticket
-      form(method="POST" action=`/tickets/${ticket.id}/actualizar`)
-        .form-row
-          .form-group
-            label(for="estado") Estado
-            select#estado(name="estado")
-              option(value="pendiente" selected=ticket.estado==='pendiente') Pendiente
-              option(value="en_proceso" selected=ticket.estado==='en_proceso') En proceso
-              option(value="resuelto" selected=ticket.estado==='resuelto') Resuelto
-              option(value="cerrado" selected=ticket.estado==='cerrado') Cerrado
+        if user.role === 'admin' || user.role === 'tecnico'
+          details.edit-description#editar-descripcion(open=editarDescripcion)
+            summary
+              i.fas.fa-edit
+              |  Editar descripción
 
-          .form-group
-            label(for="prioridad") Prioridad
-            select#prioridad(name="prioridad")
-              option(value="baja" selected=ticket.prioridad==='baja') Baja
-              option(value="media" selected=ticket.prioridad==='media') Media
-              option(value="alta" selected=ticket.prioridad==='alta') Alta
+            form(method='POST', action='/tickets/' + ticket.id + '/editar-descripcion')
+              .form-group
+                label(for='descripcion') Descripción
+                textarea#descripcion(
+                  name='descripcion'
+                  rows='5'
+                  required
+                  maxlength='5000'
+                )= ticket.descripcion
 
-        .form-group
-          label(for="observaciones") Observaciones / Notas del técnico
-          textarea#observaciones(name="observaciones" rows="3")= ticket.observaciones || ''
+              .form-actions
+                button.btn.btn-primary(type='submit')
+                  i.fas.fa-save
+                  |  Guardar descripción
 
-        .form-actions
-          button.btn.btn-primary(type="submit") Guardar cambios
+    // OBSERVACIONES
+    .detail-card
+      .detail-card-header
+        h2
+          i.fas.fa-comment-alt
+          |  Observaciones
+
+      .detail-card-body
+        .observations-section
+          if ticket.observaciones
+            p= ticket.observaciones
+          else
+            p No hay observaciones registradas.
+
+    // ADMINISTRACIÓN
+    if user.role === 'admin' || user.role === 'tecnico'
+      .detail-card.detail-card-management
+        .detail-card-header
+          h2
+            i.fas.fa-tasks
+            |  Administración de solicitud
+
+        .detail-card-body
+          form(method='POST', action='/tickets/' + ticket.id + '/actualizar')
+            .form-row
+              .form-group
+                label(for='estado') Estado
+                select#estado(name='estado', required)
+                  option(value='pendiente', selected=ticket.estado === 'pendiente') Pendiente
+                  option(value='en_proceso', selected=ticket.estado === 'en_proceso') En proceso
+                  option(value='resuelto', selected=ticket.estado === 'resuelto') Resuelto
+                  option(value='cerrado', selected=ticket.estado === 'cerrado') Cerrado
+
+              .form-group
+                label(for='prioridad') Prioridad
+                select#prioridad(name='prioridad', required)
+                  option(value='alta', selected=ticket.prioridad === 'alta') Alta
+                  option(value='media', selected=ticket.prioridad === 'media') Media
+                  option(value='baja', selected=ticket.prioridad === 'baja') Baja
+
+            .form-group
+              label(for='responsable') Responsable de atención
+              input#responsable(
+                type='text'
+                name='responsable'
+                placeholder='Escribe el nombre de quien atenderá la solicitud'
+                value=ticket.responsable || ''
+                maxlength='100'
+              )
+              p.help-text Escribe el nombre de la persona de TI que se hará cargo de esta solicitud.
+
+            .form-group
+              label(for='observaciones') Observaciones
+              textarea#observaciones(
+                name='observaciones'
+                rows='4'
+                maxlength='5000'
+                placeholder='Agrega comentarios sobre el seguimiento o la solución...'
+              )= ticket.observaciones || ''
+
+            .form-actions
+              button.btn.btn-primary(type='submit')
+                i.fas.fa-save
+                |  Guardar cambios
+
+  .detail-footer
+    a.btn.btn-secondary(href='/tickets')
+      i.fas.fa-arrow-left
+      |  Volver al listado

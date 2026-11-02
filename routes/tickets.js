@@ -146,7 +146,8 @@ router.post('/nuevo', requireAuth, async (req, res) => {
           ? categoria.trim() || null
           : null,
         solicitante_id: req.user.id,
-        estado: 'pendiente'
+        estado: 'pendiente',
+        responsable: null
       });
 
     if (error) throw error;
@@ -308,7 +309,6 @@ router.post(
         throw deleteError;
       }
 
-      // Si no se devolvieron filas, la eliminación no se confirmó.
       if (!eliminados || eliminados.length === 0) {
         console.error(
           'Supabase no eliminó filas. Revisa la política DELETE de RLS.'
@@ -404,22 +404,48 @@ router.post(
       const {
         estado,
         prioridad,
-        tecnico_asignado_id,
+        responsable,
         observaciones
       } = req.body;
 
       const ticketId = req.params.id;
 
       // Validar estado.
-      if (!estadosPermitidos.includes(estado)) {
+      if (
+        typeof estado !== 'string' ||
+        !estadosPermitidos.includes(estado)
+      ) {
         return res.status(400).send('Estado no válido.');
       }
 
       // Validar prioridad.
-      if (!prioridadesPermitidas.includes(prioridad)) {
+      if (
+        typeof prioridad !== 'string' ||
+        !prioridadesPermitidas.includes(prioridad)
+      ) {
         return res.status(400).send('Prioridad no válida.');
       }
 
+      // Validar responsable escrito manualmente.
+      if (
+        responsable !== undefined &&
+        typeof responsable !== 'string'
+      ) {
+        return res.status(400).send('Nombre del responsable no válido.');
+      }
+
+      const responsableFinal =
+        typeof responsable === 'string'
+          ? responsable.trim()
+          : '';
+
+      if (responsableFinal.length > 100) {
+        return res.status(400).send(
+          'El nombre del responsable no puede superar los 100 caracteres.'
+        );
+      }
+
+      // Validar observaciones.
       if (
         observaciones !== undefined &&
         typeof observaciones !== 'string'
@@ -427,7 +453,18 @@ router.post(
         return res.status(400).send('Observaciones no válidas.');
       }
 
-      // Consultar ticket actual.
+      const observacionesFinal =
+        typeof observaciones === 'string'
+          ? observaciones.trim()
+          : '';
+
+      if (observacionesFinal.length > 5000) {
+        return res.status(400).send(
+          'Las observaciones no pueden superar los 5000 caracteres.'
+        );
+      }
+
+      // Consultar ticket actual para conservar sus fechas.
       const {
         data: actual,
         error: consultaError
@@ -442,51 +479,72 @@ router.post(
         return res.status(404).send('Ticket no encontrado.');
       }
 
+      const ahora = new Date().toISOString();
+
       // Preparar actualización.
       const updates = {
         estado,
         prioridad,
-        observaciones: typeof observaciones === 'string'
-          ? observaciones.trim() || null
-          : null,
-        updated_at: new Date().toISOString()
-      };
 
-      // Asignar técnico si el formulario envió el campo.
-      if (tecnico_asignado_id !== undefined) {
-        updates.tecnico_asignado_id =
-          tecnico_asignado_id || null;
-      }
+        // Nombre escrito manualmente por la persona de TI.
+        responsable: responsableFinal || null,
+
+        observaciones: observacionesFinal || null,
+        updated_at: ahora
+      };
 
       // Registrar primera fecha de atención.
       if (
         estado === 'en_proceso' &&
         !actual.fecha_atencion
       ) {
-        updates.fecha_atencion = new Date().toISOString();
+        updates.fecha_atencion = ahora;
       }
 
       // Registrar fecha de resolución.
       if (['resuelto', 'cerrado'].includes(estado)) {
         if (!actual.fecha_resolucion) {
-          updates.fecha_resolucion = new Date().toISOString();
+          updates.fecha_resolucion = ahora;
         }
       } else {
         updates.fecha_resolucion = null;
       }
 
-      const { error: updateError } = await supabase
+      const {
+        data: actualizado,
+        error: updateError
+      } = await supabase
         .from('tickets')
         .update(updates)
-        .eq('id', ticketId);
+        .eq('id', ticketId)
+        .select('id')
+        .single();
 
       if (updateError) throw updateError;
+
+      if (!actualizado) {
+        return res.status(403).send(
+          'No fue posible actualizar el ticket. Verifica los permisos de Supabase.'
+        );
+      }
+
+      console.log(
+        `Ticket ${ticketId} actualizado. Responsable: ${responsableFinal || 'Sin asignar'}`
+      );
 
       return res.redirect(`/tickets/${ticketId}`);
 
     } catch (err) {
-      console.error('Error al actualizar ticket:', err);
-      return res.status(500).send('Error al actualizar el ticket.');
+      console.error('Error al actualizar ticket:', {
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+        code: err.code
+      });
+
+      return res.status(500).send(
+        'Error al actualizar el ticket.'
+      );
     }
   }
 );
