@@ -85,14 +85,11 @@ nav a:hover {
   gap: 10px;
   font-size: 0.9rem;
 }
-.user-info form {
-    display: inline;
-    margin: 0;
-}
 
-button.btn-logout {
-    font: inherit;
-    cursor: pointer;
+.user-info form {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
 }
 
 .user-info .role {
@@ -144,13 +141,29 @@ button.btn-logout {
   font-size: 0.8rem;
 }
 
+/* Botón de cerrar sesión */
 .btn-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--danger) !important;
+  font-family: inherit;
   font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  color: #991b1b !important;
 }
 
 /* =========================================
    LOGIN
+   Diseño original de Bodesa TI
 ========================================= */
 
 .login-page {
@@ -158,29 +171,62 @@ button.btn-logout {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  padding: 24px;
+  background: linear-gradient(120deg, #1e3a8a, #3b82f6);
 }
 
 .login-box {
   background: white;
-  padding: 40px;
-  border-radius: 12px;
+  padding: 48px;
+  border-radius: 14px;
   width: 100%;
-  max-width: 400px;
+  max-width: 483px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
 .login-box h1 {
   text-align: center;
   color: var(--primary);
+  font-size: 2.4rem;
   margin-bottom: 4px;
 }
 
 .login-box .subtitle {
   text-align: center;
   color: var(--gray-600);
-  margin-bottom: 30px;
-  font-size: 0.9rem;
+  margin-bottom: 36px;
+  font-size: 1rem;
+}
+
+.login-box .form-group {
+  margin-bottom: 22px;
+}
+
+.login-box .form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.login-box .form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.login-box .form-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+}
+
+.login-box button.btn-primary {
+  font-size: 1rem;
+  padding: 10px 20px;
 }
 
 /* =========================================
@@ -683,6 +729,16 @@ footer {
 
   .detail-item {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-box {
+    padding: 32px 24px;
+  }
+
+  .login-box h1 {
+    font-size: 2rem;
   }
 }
 
