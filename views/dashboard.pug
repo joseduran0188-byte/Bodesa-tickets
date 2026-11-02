@@ -32,23 +32,23 @@ block content
             th Solicitante
             th Técnico
             th Fecha de creación
-            th Acciones
+            th.actions-heading Acciones
 
         tbody
           each ticket in tickets
             tr
               //- Prioridad
               td
-                span(class='badge badge-' + ticket.prioridad)
+                span(class='badge badge-' + (ticket.prioridad || ''))
                   = ticket.prioridad || 'Sin prioridad'
 
               //- Título
-              td
+              td.ticket-title
                 strong= ticket.titulo || 'Sin título'
 
               //- Estado
               td
-                span(class='badge badge-estado-' + ticket.estado)
+                span(class='badge badge-estado-' + (ticket.estado || ''))
                   = ticket.estado || 'Sin estado'
 
               //- Solicitante
@@ -66,7 +66,7 @@ block content
                   | Sin asignar
 
               //- Fecha de creación
-              td
+              td.ticket-date
                 if ticket.fecha_creacion
                   = new Date(ticket.fecha_creacion).toLocaleString('es-MX')
                 else
@@ -74,35 +74,37 @@ block content
 
               //- Acciones
               td.actions
-                //- Ver solicitud
-                a.action-btn(
-                  href='/tickets/' + ticket.id
-                  title="Ver solicitud"
-                  aria-label="Ver solicitud"
-                )
-                  i.fa-solid.fa-eye
-                  span Ver
+                .action-buttons
 
-                //- Editar descripción
-                a.action-btn(
-                  href='/tickets/' + ticket.id + '?editar=1#editar-descripcion'
-                  title="Editar descripción"
-                  aria-label="Editar descripción"
-                )
-                  i.fa-solid.fa-pen-to-square
-                  span Editar
-
-                //- Eliminar: solamente administrador
-                if user && user.role === 'admin'
-                  form(
-                    method="POST"
-                    action='/tickets/' + ticket.id + '/eliminar'
-                    onsubmit="return confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.');"
+                  //- Ver solicitud
+                  a.action-btn.action-view(
+                    href='/tickets/' + ticket.id
+                    title="Ver solicitud"
+                    aria-label="Ver solicitud"
                   )
-                    button.action-btn.action-delete(
-                      type="submit"
-                      title="Eliminar solicitud"
-                      aria-label="Eliminar solicitud"
+                    i.fa-solid.fa-eye
+                    span Ver
+
+                  //- Editar descripción
+                  a.action-btn.action-edit(
+                    href='/tickets/' + ticket.id + '?editar=1#editar-descripcion'
+                    title="Editar descripción"
+                    aria-label="Editar descripción"
+                  )
+                    i.fa-solid.fa-pen-to-square
+                    span Editar
+
+                  //- Eliminar: solamente administrador
+                  if user && user.role === 'admin'
+                    form.action-form(
+                      method="POST"
+                      action='/tickets/' + ticket.id + '/eliminar'
+                      onsubmit="return confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.');"
                     )
-                      i.fa-solid.fa-trash
-                      span Eliminar
+                      button.action-btn.action-delete(
+                        type="submit"
+                        title="Eliminar solicitud"
+                        aria-label="Eliminar solicitud"
+                      )
+                        i.fa-solid.fa-trash
+                        span Eliminar

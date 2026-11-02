@@ -5,11 +5,13 @@
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
+
   --gray-50: #f9fafb;
   --gray-100: #f3f4f6;
   --gray-200: #e5e7eb;
   --gray-600: #4b5563;
   --gray-800: #1f2937;
+
   --radius: 8px;
 }
 
@@ -20,7 +22,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, sans-serif;
   background: var(--gray-50);
   color: var(--gray-800);
   line-height: 1.5;
@@ -32,7 +35,9 @@ body {
   padding: 0 20px;
 }
 
-/* HEADER */
+/* =========================================
+   HEADER
+========================================= */
 
 .header {
   background: white;
@@ -45,6 +50,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .logo h1 {
@@ -87,17 +93,23 @@ nav a:hover {
   font-size: 0.75rem;
 }
 
-/* BOTONES */
+/* =========================================
+   BOTONES GENERALES
+========================================= */
 
 .btn {
-  display: inline-block;
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
   border-radius: var(--radius);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   border: none;
   cursor: pointer;
   font-size: 0.9rem;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary {
@@ -128,7 +140,9 @@ nav a:hover {
   font-size: 0.85rem;
 }
 
-/* LOGIN */
+/* =========================================
+   LOGIN
+========================================= */
 
 .login-page {
   min-height: 100vh;
@@ -160,7 +174,9 @@ nav a:hover {
   font-size: 0.9rem;
 }
 
-/* FORMULARIOS */
+/* =========================================
+   FORMULARIOS
+========================================= */
 
 .form-group {
   margin-bottom: 18px;
@@ -222,7 +238,9 @@ nav a:hover {
   margin-bottom: 20px;
 }
 
-/* ENCABEZADO DE PÁGINA */
+/* =========================================
+   ENCABEZADO DE PÁGINA
+========================================= */
 
 .page-header {
   display: flex;
@@ -232,98 +250,202 @@ nav a:hover {
   gap: 16px;
 }
 
-/* TABLA DE TICKETS */
+.page-header h2 {
+  font-size: 1.5rem;
+}
+
+.help-text {
+  display: block;
+  margin-top: 6px;
+  color: var(--gray-600);
+  font-size: 0.8rem;
+}
+
+/* =========================================
+   TABLA DE SOLICITUDES
+========================================= */
 
 .tickets-table-wrapper {
+  width: 100%;
   background: white;
   border-radius: var(--radius);
   border: 1px solid var(--gray-200);
   overflow-x: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .tickets-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .tickets-table th {
   background: var(--gray-50);
   text-align: left;
-  padding: 12px 16px;
-  font-size: 0.8rem;
+  padding: 14px 16px;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--gray-600);
   border-bottom: 1px solid var(--gray-200);
+  white-space: nowrap;
 }
 
 .tickets-table td {
   padding: 14px 16px;
   border-bottom: 1px solid var(--gray-100);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  vertical-align: middle;
+}
+
+.tickets-table tbody tr {
+  transition: background 0.2s ease;
+}
+
+.tickets-table tbody tr:hover {
+  background: #fafbff;
 }
 
 .tickets-table tr:last-child td {
   border-bottom: none;
 }
 
-/* ACCIONES DE LA TABLA */
+.ticket-title {
+  min-width: 170px;
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
 
-.tickets-table td.actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
+.ticket-date {
+  min-width: 150px;
   white-space: nowrap;
 }
 
-.actions form {
-  display: inline-flex;
-  margin: 0;
+/* =========================================
+   ACCIONES DEL DASHBOARD
+========================================= */
+
+.tickets-table th.actions-heading {
+  min-width: 240px;
+  text-align: center;
 }
 
+.tickets-table td.actions {
+  min-width: 240px;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Contenedor de los tres botones */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* Formulario de eliminación */
+.action-form {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+}
+
+/* Estilo general de botones */
 .action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #dce1e7;
+  gap: 6px;
+
+  min-width: 65px;
+  min-height: 36px;
+  padding: 8px 10px;
+
+  border: 1px solid #dbe1ea;
   border-radius: 8px;
-  background: white;
+
+  background: #ffffff;
   color: #475569;
-  font-size: 14px;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.action-btn i {
+  font-size: 13px;
 }
 
 .action-btn:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+  transform: translateY(-2px);
 }
 
+/* Ver */
+.action-view {
+  color: #2451b7;
+  border-color: #cbdcff;
+}
+
+.action-view:hover {
+  background: #eff5ff;
+  border-color: #2451b7;
+}
+
+/* Editar */
+.action-edit {
+  color: #16804a;
+  border-color: #bbebd0;
+}
+
+.action-edit:hover {
+  background: #ecfdf3;
+  border-color: #16804a;
+}
+
+/* Eliminar */
 .action-delete {
   color: #dc2626;
-}
-
-.action-delete:hover {
-  background: #fee2e2;
-  color: #b91c1c;
   border-color: #fecaca;
 }
 
-/* BADGES */
+.action-delete:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+/* Accesibilidad */
+.action-btn:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}
+
+/* =========================================
+   BADGES
+========================================= */
 
 .badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .badge-alta {
@@ -361,7 +483,9 @@ nav a:hover {
   color: var(--gray-600);
 }
 
-/* DETALLE DEL TICKET */
+/* =========================================
+   DETALLE DEL TICKET
+========================================= */
 
 .detail-grid {
   display: grid;
@@ -411,7 +535,9 @@ nav a:hover {
   line-height: 1.6;
 }
 
-/* EDICIÓN DE DESCRIPCIÓN */
+/* =========================================
+   EDICIÓN DE DESCRIPCIÓN
+========================================= */
 
 .edit-description {
   margin-top: 20px;
@@ -433,13 +559,6 @@ nav a:hover {
   margin-top: 20px;
 }
 
-.help-text {
-  display: block;
-  margin-top: 6px;
-  color: var(--gray-600);
-  font-size: 0.8rem;
-}
-
 .observations-section {
   margin-top: 24px;
   padding-top: 16px;
@@ -450,7 +569,9 @@ nav a:hover {
   margin-bottom: 8px;
 }
 
-/* ALERTAS */
+/* =========================================
+   ALERTAS
+========================================= */
 
 .alert {
   padding: 12px 16px;
@@ -464,7 +585,9 @@ nav a:hover {
   color: #991b1b;
 }
 
-/* ESTADO VACÍO */
+/* =========================================
+   ESTADO VACÍO
+========================================= */
 
 .empty-state {
   text-align: center;
@@ -474,11 +597,24 @@ nav a:hover {
   border: 1px solid var(--gray-200);
 }
 
-.empty-state p {
+.empty-state > i {
+  font-size: 42px;
+  color: #94a3b8;
   margin-bottom: 16px;
 }
 
-/* FOOTER */
+.empty-state h3 {
+  margin-bottom: 8px;
+}
+
+.empty-state p {
+  margin-bottom: 16px;
+  color: var(--gray-600);
+}
+
+/* =========================================
+   FOOTER
+========================================= */
 
 footer {
   margin-top: 60px;
@@ -488,7 +624,19 @@ footer {
   font-size: 0.85rem;
 }
 
-/* RESPONSIVE */
+/* =========================================
+   RESPONSIVE
+========================================= */
+
+@media (max-width: 900px) {
+  .tickets-table {
+    min-width: 1050px;
+  }
+
+  .tickets-table-wrapper {
+    overflow-x: auto;
+  }
+}
 
 @media (max-width: 768px) {
   .form-row,
@@ -514,10 +662,6 @@ footer {
 
   .page-header {
     flex-wrap: wrap;
-  }
-
-  .tickets-table {
-    min-width: 850px;
   }
 
   .detail-item {
@@ -546,130 +690,8 @@ footer {
   .form-actions .btn {
     width: 100%;
   }
-  
-/* =========================================
-   ACCIONES DEL DASHBOARD
-========================================= */
 
-.tickets-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.tickets-table th,
-.tickets-table td {
-  vertical-align: middle;
-}
-
-.tickets-table th:last-child {
-  text-align: center;
-  min-width: 230px;
-}
-
-.tickets-table td.actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 230px;
-  padding: 16px 12px;
-  white-space: nowrap;
-}
-
-/* Formulario de eliminación */
-.tickets-table td.actions form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-}
-
-/* Botones de acciones */
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 38px;
-  padding: 8px 11px;
-  border: 1px solid #dbe1ea;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #344054;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background 0.2s ease,
-              border-color 0.2s ease,
-              color 0.2s ease,
-              transform 0.2s ease;
-}
-
-.action-btn i {
-  font-size: 14px;
-}
-
-/* Ver */
-.action-btn[title="Ver solicitud"] {
-  color: #2451b7;
-}
-
-.action-btn[title="Ver solicitud"]:hover {
-  background: #eff5ff;
-  border-color: #2451b7;
-}
-
-/* Editar */
-.action-btn[title="Editar descripción"] {
-  color: #16804a;
-}
-
-.action-btn[title="Editar descripción"]:hover {
-  background: #ecfdf3;
-  border-color: #16804a;
-}
-
-/* Eliminar */
-.action-btn.action-delete {
-  color: #dc2626;
-}
-
-.action-btn.action-delete:hover {
-  background: #fef2f2;
-  border-color: #dc2626;
-}
-
-/* Efecto al pasar el cursor */
-.action-btn:hover {
-  transform: translateY(-1px);
-}
-
-/* Evitar que los botones se deformen */
-.tickets-table td.actions > * {
-  flex-shrink: 0;
-}
-
-/* =========================================
-   RESPONSIVE
-========================================= */
-
-@media (max-width: 900px) {
-  .tickets-table-wrapper {
-    overflow-x: auto;
+  .action-btn {
+    min-width: 65px;
   }
-
-  .tickets-table {
-    min-width: 1050px;
-  }
-}
-
-@media (max-width: 600px) {
-  .tickets-table td.actions {
-    justify-content: flex-start;
-  }
-}
-
 }
