@@ -1,4 +1,5 @@
 const express = require('express');
+const router = express.Router();
 
 // Formatea las fechas usando la zona horaria de Colima.
 function formatearFecha(fecha, valorPendiente = '—') {

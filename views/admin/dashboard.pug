@@ -5,82 +5,123 @@ block content
     .container
         .page-header
             div
-                h1 Panel de administración
+                h2= `Ticket #${ticket.id.substring(0, 8)}`
                 p Bienvenido, #{user.full_name || user.email}
-
                 p
                     strong Tipo de cuenta:
                     |  Administrador
 
-        if tickets && tickets.length
-            .tickets-table-wrapper
-                table.tickets-table
-                    thead
-                        tr
-                            th Folio
-                            th Solicitud
-                            th Solicitante
-                            th Prioridad
-                            th Estado
-                            th Responsable
-                            th Fecha
-                            th.actions-heading Acciones
+            a.btn.btn-secondary(href=dashboardUrl)
+                i.fa-solid.fa-arrow-left
+                |  Volver al panel
 
-                    tbody
-                        each ticket in tickets
-                            tr
-                                td= ticket.id
-                                td.ticket-title= ticket.titulo
-                                td= ticket.nombre_solicitante || 'Sin nombre registrado'
+        .detail-card
+            h3 Información del ticket
 
-                                td
-                                    - const prioridad = (ticket.prioridad || 'media').toLowerCase()
-                                    - const prioridadClase = prioridad === 'urgente' ? 'alta' : prioridad
-                                    span(class='badge badge-' + prioridadClase)
-                                        = prioridad.charAt(0).toUpperCase() + prioridad.slice(1)
+            .detail-item
+                strong Folio:
+                span= ticket.id
 
-                                td
-                                    - const estado = (ticket.estado || 'pendiente').toLowerCase()
-                                    - const estadoClase = estado === 'cancelado' ? 'cerrado' : estado
-                                    span(class='badge badge-estado-' + estadoClase)
-                                        = estado === 'en_proceso' ? 'En proceso' : estado.charAt(0).toUpperCase() + estado.slice(1)
+            .detail-item
+                strong Solicitante:
+                span= ticket.nombre_solicitante || 'Sin nombre registrado'
 
-                                td.responsable-column
-                                    = ticket.responsable || 'Sin asignar'
+            .detail-item
+                strong Fecha de creación:
+                span= formatearFecha(ticket.created_at || ticket.fecha_creacion)
 
-                                td.ticket-date
-                                    = ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('es-MX') : '—'
+            .detail-item
+                strong Fecha de atención:
+                span= formatearFecha(ticket.fecha_atencion, 'Pendiente')
 
-                                td.actions
-                                    .action-buttons
-                                        a.action-btn.action-view(
-                                            href=dashboardUrl + '/' + ticket.id
-                                            title='Ver ticket'
-                                        )
-                                            i.fa-solid.fa-eye
-                                            span Ver
+            .detail-item
+                strong Fecha de resolución:
+                span= formatearFecha(ticket.fecha_resolucion, 'Pendiente')
 
-                                        a.action-btn.action-edit(
-                                            href=dashboardUrl + '/' + ticket.id + '?editar=1'
-                                            title='Editar ticket'
-                                        )
-                                            i.fa-solid.fa-pen-to-square
-                                            span Editar
+        .form-card
+            h3 Gestión del ticket
 
-                                        form.action-form(
-                                            action=dashboardUrl + '/' + ticket.id + '/eliminar'
-                                            method='POST'
-                                            onsubmit="return confirm('¿Seguro que deseas eliminar este ticket?');"
-                                        )
-                                            button.action-btn.action-delete(
-                                                type='submit'
-                                                title='Eliminar ticket'
-                                            )
-                                                i.fa-solid.fa-trash-can
-                                                span Eliminar
+            if editarTicket
+                form(method="POST" action=dashboardUrl + '/' + ticket.id + '/actualizar')
+                    .form-group
+                        label(for="prioridad") Prioridad
+                        select#prioridad(name="prioridad" required)
+                            option(value="baja" selected=ticket.prioridad === 'baja') Baja
+                            option(value="media" selected=ticket.prioridad === 'media') Media
+                            option(value="alta" selected=ticket.prioridad === 'alta') Alta
+                            option(value="urgente" selected=ticket.prioridad === 'urgente') Urgente
 
-        else
-            .empty-state
-                i.fa-solid.fa-clipboard-list
-                h3 No hay tickets registrados
-                p Cuando los usuarios registren solicitudes, aparecerán aquí.
+                    .form-group
+                        label(for="estado") Estado
+                        select#estado(name="estado" required)
+                            option(value="pendiente" selected=ticket.estado === 'pendiente') Pendiente
+                            option(value="en_proceso" selected=ticket.estado === 'en_proceso') En proceso
+                            option(value="resuelto" selected=ticket.estado === 'resuelto') Resuelto
+                            option(value="cancelado" selected=ticket.estado === 'cancelado') Cancelado
+
+                    .form-group
+                        label(for="responsable") Responsable
+                        input#responsable(
+                            type="text"
+                            name="responsable"
+                            maxlength="150"
+                            value=ticket.responsable || ''
+                        )
+
+                    .form-group
+                        label(for="observaciones") Observaciones de soporte
+                        textarea#observaciones(
+                            name="observaciones"
+                            rows="5"
+                            maxlength="5000"
+                        )= ticket.observaciones || ''
+
+                    .form-actions
+                        button.btn.btn-primary(type="submit")
+                            i.fa-solid.fa-floppy-disk
+                            |  Guardar cambios
+
+                        a.btn.btn-secondary(href=dashboardUrl + '/' + ticket.id)
+                            | Cancelar
+
+            else
+                .detail-item
+                    strong Título:
+                    span= ticket.titulo
+
+                .detail-item
+                    strong Descripción:
+                    p.descripcion= ticket.descripcion
+
+                .detail-item
+                    strong Categoría:
+                    span= ticket.categoria || '—'
+
+                .detail-item
+                    strong Prioridad:
+                    span= ticket.prioridad || '—'
+
+                .detail-item
+                    strong Estado:
+                    span= ticket.estado || '—'
+
+                .detail-item
+                    strong Responsable:
+                    span= ticket.responsable || 'Sin asignar'
+
+                .detail-item
+                    strong Observaciones:
+                    p.descripcion= ticket.observaciones || 'Sin observaciones'
+
+                a.btn.btn-primary(href=dashboardUrl + '/' + ticket.id + '?editar=1')
+                    i.fa-solid.fa-pen-to-square
+                    |  Editar ticket
+
+                form(
+                    method="POST"
+                    action=dashboardUrl + '/' + ticket.id + '/eliminar'
+                    onsubmit="return confirm('¿Estás seguro de eliminar este ticket?');"
+                )
+                    button.btn.btn-danger(type="submit")
+                        i.fa-solid.fa-trash
+                        |  Eliminar ticket
