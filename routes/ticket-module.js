@@ -1,4 +1,3 @@
-
 const express = require('express');
 
 const {
@@ -47,6 +46,33 @@ function limpiar(valor) {
 function esUUID(valor) {
     return typeof valor === 'string' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(valor);
+}
+
+// ========================================
+// FORMATO DE FECHAS - HORARIO DE COLIMA
+// ========================================
+
+function formatearFecha(fecha, valorPendiente = '—') {
+    if (!fecha) {
+        return valorPendiente;
+    }
+
+    const fechaValida = new Date(fecha);
+
+    if (Number.isNaN(fechaValida.getTime())) {
+        return valorPendiente;
+    }
+
+    return new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    }).format(fechaValida);
 }
 
 // ========================================
@@ -115,6 +141,7 @@ function crearModuloTickets(rol) {
             dashboardUrl: base,
             nuevoTicketUrl: rol === 'user' ? `${base}/nuevo` : null,
             logoutUrl: `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
+            formatearFecha,
             ...adicionales
         };
     }
@@ -325,7 +352,7 @@ function crearModuloTickets(rol) {
             // Buscar el ticket.
             const { data: ticket, error: findError } = await req.supabase
                 .from('tickets')
-                .select('id, solicitante_id, fecha_atencion, fecha_resolucion')
+                .select('id, solicitante_id')
                 .eq('id', ticketId)
                 .maybeSingle();
 
@@ -442,31 +469,13 @@ function crearModuloTickets(rol) {
                     );
                 }
 
-                const ahora = new Date().toISOString();
-
+                // Las fechas son administradas por el trigger de Supabase.
                 const actualizacion = {
                     estado,
                     prioridad,
                     responsable: responsable || null,
-                    observaciones: observaciones || null,
-                    updated_at: ahora
+                    observaciones: observaciones || null
                 };
-
-                // Registrar primera fecha de atención.
-                if (
-                    (estado === 'en_proceso' || estado === 'resuelto') &&
-                    !ticket.fecha_atencion
-                ) {
-                    actualizacion.fecha_atencion = ahora;
-                }
-
-                // Registrar fecha de resolución.
-                if (
-                    estado === 'resuelto' &&
-                    !ticket.fecha_resolucion
-                ) {
-                    actualizacion.fecha_resolucion = ahora;
-                }
 
                 const { data: actualizado, error } = await req.supabase
                     .from('tickets')

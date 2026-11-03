@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 
@@ -74,6 +73,33 @@ function vistaDetalle(role) {
 }
 
 // ============================================
+// FORMATO DE FECHAS - HORARIO DE COLIMA
+// ============================================
+
+function formatearFecha(fecha, valorPendiente = '—') {
+    if (!fecha) {
+        return valorPendiente;
+    }
+
+    const fechaValida = new Date(fecha);
+
+    if (Number.isNaN(fechaValida.getTime())) {
+        return valorPendiente;
+    }
+
+    return new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    }).format(fechaValida);
+}
+
+// ============================================
 // 1. DASHBOARD INDEPENDIENTE POR ROL
 // ============================================
 
@@ -114,7 +140,8 @@ router.get('/', requireAuth, async (req, res) => {
         return res.render(vista, {
             title: 'Panel de tickets',
             user: req.user,
-            tickets: tickets || []
+            tickets: tickets || [],
+            formatearFecha
         });
 
     } catch (error) {
@@ -141,7 +168,8 @@ router.get('/nuevo', requireAuth, async (req, res) => {
         return res.render('usuario/ticket-nuevo', {
             title: 'Nuevo ticket',
             user: req.user,
-            error: null
+            error: null,
+            formatearFecha
         });
 
     } catch (error) {
@@ -292,7 +320,8 @@ router.get('/:id', requireAuth, async (req, res) => {
             title: `Ticket #${ticket.id}`,
             user: req.user,
             ticket,
-            editarTicket: req.query.editar === '1'
+            editarTicket: req.query.editar === '1',
+            formatearFecha
         });
 
     } catch (error) {
@@ -314,9 +343,7 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             .from('tickets')
             .select(`
                 id,
-                solicitante_id,
-                fecha_atencion,
-                fecha_resolucion
+                solicitante_id
             `)
             .eq('id', req.params.id)
             .maybeSingle();
@@ -428,8 +455,7 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             );
         }
 
-        const ahora = new Date().toISOString();
-
+        // Supabase administra las fechas mediante el trigger.
         const actualizacion = {
             nombre_solicitante: nombre,
             titulo,
@@ -438,25 +464,8 @@ router.post('/:id/actualizar', requireAuth, async (req, res) => {
             estado,
             prioridad,
             responsable: responsable || null,
-            observaciones: observaciones || null,
-            updated_at: ahora
+            observaciones: observaciones || null
         };
-
-        // Registrar primera fecha de atención.
-        if (
-            estado === 'en_proceso' &&
-            !ticket.fecha_atencion
-        ) {
-            actualizacion.fecha_atencion = ahora;
-        }
-
-        // Registrar primera fecha de resolución.
-        if (
-            estado === 'resuelto' &&
-            !ticket.fecha_resolucion
-        ) {
-            actualizacion.fecha_resolucion = ahora;
-        }
 
         const { error } = await req.supabase
             .from('tickets')
@@ -528,7 +537,7 @@ router.post(
             return res.redirect(rutaPanel(req.user.role));
 
         } catch (error) {
-            console.error('ERROR EN ELIMINADO DE TICKET:', error);
+            console.error('ERROR EN EL ELIMINADO DE TICKET:', error);
 
             return res.status(500).send(
                 'Error al eliminar el ticket.'
