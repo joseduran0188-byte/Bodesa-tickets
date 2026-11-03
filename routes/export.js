@@ -27,7 +27,7 @@ router.get('/excel', async (req, res) => {
     const { data: tickets, error } = await supabase
       .from('tickets')
       .select('*')
-      .order('fecha_creacion', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       throw error;
@@ -43,7 +43,7 @@ router.get('/excel', async (req, res) => {
 
     // Configurar columnas
     sheet.columns = [
-      { header: 'Fecha de solicitud', key: 'fecha_creacion', width: 25 },
+      { header: 'Fecha de solicitud', key: 'created_at', width: 25 },
       { header: 'Nombre de la actividad', key: 'titulo', width: 40 },
       { header: 'Fecha/Hora en que se tomó', key: 'fecha_atencion', width: 28 },
       { header: 'Fecha en que se realizó', key: 'fecha_resolucion', width: 28 },
@@ -94,14 +94,14 @@ router.get('/excel', async (req, res) => {
     // Agregar registros
     (tickets || []).forEach((ticket) => {
       sheet.addRow({
-        fecha_creacion: formatoFecha(ticket.fecha_creacion),
+        created_at: formatoFecha(ticket.created_at),
         titulo: ticket.titulo || '',
         fecha_atencion: formatoFecha(ticket.fecha_atencion),
         fecha_resolucion: formatoFecha(ticket.fecha_resolucion),
         responsable: ticket.responsable || '',
         prioridad: prioridades[ticket.prioridad] || ticket.prioridad || '',
         estado: estados[ticket.estado] || ticket.estado || '',
-        solicitante: ticket.solicitante || '',
+        solicitante: ticket.nombre_solicitante || '',
         categoria: ticket.categoria || ''
       });
     });

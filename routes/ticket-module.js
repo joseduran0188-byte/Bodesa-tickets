@@ -1,4 +1,5 @@
 const express = require('express');
+const exportRoutes = require('./export');
 
 const {
     requireAuth,
@@ -119,6 +120,9 @@ function crearModuloTickets(rol) {
 
     // Autenticación y autorización.
     router.use(requireAuth, modulo.middleware);
+    if (rol === 'admin' || rol === 'tecnico') {
+    router.use('/exportar', exportRoutes);
+}
 
     // ========================================
     // FUNCIONES AUXILIARES DE RUTAS
