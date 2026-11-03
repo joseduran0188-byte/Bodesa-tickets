@@ -27,16 +27,16 @@ block content
                 span= ticket.nombre_solicitante || 'Sin nombre registrado'
 
             .detail-item
-                strong Fecha de creación:
-                span= ticket.created_at ? new Date(ticket.created_at).toLocaleString('es-MX') : '—'
+    strong Fecha de creación:
+    span= formatearFecha(ticket.created_at || ticket.fecha_creacion)
 
-            .detail-item
-                strong Fecha de atención:
-                span= ticket.fecha_atencion ? new Date(ticket.fecha_atencion).toLocaleString('es-MX') : 'Pendiente'
+.detail-item
+    strong Fecha de atención:
+    span= formatearFecha(ticket.fecha_atencion, 'Pendiente')
 
-            .detail-item
-                strong Fecha de resolución:
-                span= ticket.fecha_resolucion ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX') : 'Pendiente'
+.detail-item
+    strong Fecha de resolución:
+    span= formatearFecha(ticket.fecha_resolucion, 'Pendiente')
 
         .form-card
             h3 Gestión del ticket
