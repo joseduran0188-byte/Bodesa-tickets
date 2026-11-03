@@ -47,22 +47,49 @@ block content
           : 'Sin asignar'
 
       .detail-item
-        strong Fecha de creación:
-        span= ticket.fecha_creacion
-          ? new Date(ticket.fecha_creacion).toLocaleString('es-MX')
-          : '—'
+    strong Fecha de creación:
+    span= ticket.fecha_creacion
+        ? new Date(ticket.fecha_creacion).toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23'
+        })
+        : '—'
 
-      .detail-item
-        strong Fecha de atención:
-        span= ticket.fecha_atencion
-          ? new Date(ticket.fecha_atencion).toLocaleString('es-MX')
-          : '—'
+.detail-item
+    strong Fecha de atención:
+    span= ticket.fecha_atencion
+        ? new Date(ticket.fecha_atencion).toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23'
+        })
+        : '—'
 
-      .detail-item
-        strong Fecha de resolución:
-        span= ticket.fecha_resolucion
-          ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX')
-          : '—'
+.detail-item
+    strong Fecha de resolución:
+    span= ticket.fecha_resolucion
+        ? new Date(ticket.fecha_resolucion).toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23'
+        })
+        : '—'
 
     //- DESCRIPCIÓN
     .detail-card
