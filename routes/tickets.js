@@ -1,27 +1,6 @@
+
 const express = require('express');
 const router = express.Router();
-
-// Formatea las fechas usando la zona horaria de Colima.
-function formatearFecha(fecha, valorPendiente = '—') {
-    if (!fecha) return valorPendiente;
-
-    const fechaValida = new Date(fecha);
-
-    if (Number.isNaN(fechaValida.getTime())) {
-        return valorPendiente;
-    }
-
-    return new Intl.DateTimeFormat('es-MX', {
-        timeZone: 'America/Mexico_City',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-    }).format(fechaValida);
-}
 
 const {
     requireAuth,
@@ -135,8 +114,7 @@ router.get('/', requireAuth, async (req, res) => {
         return res.render(vista, {
             title: 'Panel de tickets',
             user: req.user,
-            tickets: tickets || [],
-            formatearFecha
+            tickets: tickets || []
         });
 
     } catch (error) {
@@ -314,8 +292,7 @@ router.get('/:id', requireAuth, async (req, res) => {
             title: `Ticket #${ticket.id}`,
             user: req.user,
             ticket,
-            editarTicket: req.query.editar === '1',
-            formatearFecha
+            editarTicket: req.query.editar === '1'
         });
 
     } catch (error) {
@@ -551,7 +528,7 @@ router.post(
             return res.redirect(rutaPanel(req.user.role));
 
         } catch (error) {
-            console.error('ERROR EN EL ELIMINADO DE TICKET:', error);
+            console.error('ERROR EN ELIMINADO DE TICKET:', error);
 
             return res.status(500).send(
                 'Error al eliminar el ticket.'
