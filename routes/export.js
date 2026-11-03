@@ -1,23 +1,32 @@
 
 const express = require('express');
-const router = express.Router();
 const ExcelJS = require('exceljs');
 
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const router = express.Router({ mergeParams: true });
 
-router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
+router.get('/excel', async (req, res) => {
   try {
-    // Utilizar el cliente autenticado del usuario
+    // Validar que exista una sesión autenticada
+    if (!req.user) {
+      return res.status(401).send('Debes iniciar sesión.');
+    }
+
+    // Permitir exportación únicamente a administradores y técnicos
+    if (!['admin', 'tecnico'].includes(req.user.role)) {
+      return res.status(403).send('No tienes permiso para exportar solicitudes.');
+    }
+
+    // Utilizar el cliente Supabase autenticado
     const supabase = req.supabase;
 
-    // Consultar las solicitudes registradas
+    if (!supabase) {
+      throw new Error('No se encontró el cliente de Supabase.');
+    }
+
+    // Consultar las solicitudes
     const { data: tickets, error } = await supabase
       .from('tickets')
-      .select(`
-        *,
-        solicitante:profiles!solicitante_id (full_name),
-        tecnico:profiles!tecnico_asignado_id (full_name)
-      `)
+      .select('*')
       .order('fecha_creacion', { ascending: false });
 
     if (error) {
@@ -34,16 +43,68 @@ router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
 
     // Configurar columnas
     sheet.columns = [
-      { header: 'Fecha de solicitud', key: 'fecha_creacion', width: 22 },
+      { header: 'Fecha de solicitud', key: 'fecha_creacion', width: 25 },
       { header: 'Nombre de la actividad', key: 'titulo', width: 40 },
-      { header: 'Fecha/Hora en que se tomó', key: 'fecha_atencion', width: 25 },
-      { header: 'Fecha en que se realizó', key: 'fecha_resolucion', width: 25 },
-      { header: 'Persona que atendió', key: 'tecnico', width: 25 },
+      { header: 'Fecha/Hora en que se tomó', key: 'fecha_atencion', width: 28 },
+      { header: 'Fecha en que se realizó', key: 'fecha_resolucion', width: 28 },
+      { header: 'Persona que atendió', key: 'responsable', width: 25 },
       { header: 'Prioridad', key: 'prioridad', width: 15 },
       { header: 'Estado', key: 'estado', width: 18 },
       { header: 'Solicitante', key: 'solicitante', width: 25 },
-      { header: 'Categoría', key: 'categoria', width: 18 }
+      { header: 'Categoría', key: 'categoria', width: 20 }
     ];
+
+    // Formatear fechas en horario de Colima
+    const formatoFecha = (fecha) => {
+      if (!fecha) return '';
+
+      const fechaValida = new Date(fecha);
+
+      if (Number.isNaN(fechaValida.getTime())) {
+        return '';
+      }
+
+      return fechaValida.toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    };
+
+    // Traducir estados
+    const estados = {
+      pendiente: 'Pendiente',
+      en_proceso: 'En proceso',
+      resuelto: 'Resuelto',
+      cerrado: 'Cerrado'
+    };
+
+    // Traducir prioridades
+    const prioridades = {
+      baja: 'Baja',
+      media: 'Media',
+      alta: 'Alta',
+      urgente: 'Urgente'
+    };
+
+    // Agregar registros
+    (tickets || []).forEach((ticket) => {
+      sheet.addRow({
+        fecha_creacion: formatoFecha(ticket.fecha_creacion),
+        titulo: ticket.titulo || '',
+        fecha_atencion: formatoFecha(ticket.fecha_atencion),
+        fecha_resolucion: formatoFecha(ticket.fecha_resolucion),
+        responsable: ticket.responsable || '',
+        prioridad: prioridades[ticket.prioridad] || ticket.prioridad || '',
+        estado: estados[ticket.estado] || ticket.estado || '',
+        solicitante: ticket.solicitante || '',
+        categoria: ticket.categoria || ''
+      });
+    });
 
     // Estilo del encabezado
     const header = sheet.getRow(1);
@@ -68,36 +129,6 @@ router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
 
     header.height = 30;
 
-    // Formatear fechas
-    const formatoFecha = (fecha) => {
-      if (!fecha) return '';
-
-      return new Date(fecha).toLocaleString('es-MX', {
-        timeZone: 'America/Mexico_City',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      });
-    };
-
-    // Agregar registros
-    (tickets || []).forEach((ticket) => {
-      sheet.addRow({
-        fecha_creacion: formatoFecha(ticket.fecha_creacion),
-        titulo: ticket.titulo || '',
-        fecha_atencion: formatoFecha(ticket.fecha_atencion),
-        fecha_resolucion: formatoFecha(ticket.fecha_resolucion),
-        tecnico: ticket.tecnico?.full_name || '',
-        prioridad: ticket.prioridad || '',
-        estado: ticket.estado || '',
-        solicitante: ticket.solicitante?.full_name || '',
-        categoria: ticket.categoria || ''
-      });
-    });
-
     // Alinear contenido
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
@@ -108,7 +139,7 @@ router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
       }
     });
 
-    // Filtros en encabezados
+    // Filtros
     sheet.autoFilter = {
       from: 'A1',
       to: 'I1'
@@ -119,7 +150,7 @@ router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
       { state: 'frozen', ySplit: 1 }
     ];
 
-    // Configurar respuesta para descargar Excel
+    // Configurar descarga
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -130,9 +161,7 @@ router.get('/excel', requireAuth, requireAdmin, async (req, res) => {
       'attachment; filename="solicitudes-ti-bodesa.xlsx"'
     );
 
-    // Generar y enviar archivo
     await workbook.xlsx.write(res);
-
     res.end();
 
   } catch (err) {

@@ -4,7 +4,6 @@ html(lang="es")
     head
         meta(charset="UTF-8")
         meta(name="viewport" content="width=device-width, initial-scale=1.0")
-
         meta(name="referrer" content="no-referrer")
 
         title= title || 'Bodesa TI - Gestión de Solicitudes'
@@ -36,6 +35,12 @@ html(lang="es")
                             a(href=nuevoTicketUrl)
                                 i.fa-solid.fa-plus
                                 |  Nueva Solicitud
+
+                        //- Exportar Excel para administrador y técnico
+                        if user.role === 'admin' || user.role === 'tecnico'
+                            a(href=dashboardUrl + '/exportar/excel')
+                                i.fa-solid.fa-file-excel
+                                |  Exportar Excel
 
                         .user-info
                             span #{user.full_name || user.email}
