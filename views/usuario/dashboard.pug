@@ -48,8 +48,7 @@ block content
                                 td.responsable-column
                                     = ticket.responsable || 'Sin asignar'
 
-                                td.ticket-date
-                                    = ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('es-MX') : '—'
+                                td= ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'numeric', year: 'numeric' }) : '—'
 
                                 td.actions
                                     .action-buttons
