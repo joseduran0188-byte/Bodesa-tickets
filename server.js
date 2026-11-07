@@ -5,10 +5,20 @@ const express = require('express');
 const path = require('path');
 const helmet = require('helmet');
 
+// ========================================
+// IMPORTACIÓN DE RUTAS
+// ========================================
+
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const tecnicoRoutes = require('./routes/tecnico');
 const usuarioRoutes = require('./routes/usuario');
+const actividadesRoutes = require('./routes/actividades');
+const webhookRoutes = require('./routes/webhook');
+
+// ========================================
+// INICIALIZACIÓN DE EXPRESS
+// ========================================
 
 const app = express();
 
@@ -68,6 +78,12 @@ app.use(
 );
 
 // ========================================
+// WEBHOOK PÚBLICO
+// ========================================
+
+app.use('/api/webhook', webhookRoutes);
+
+// ========================================
 // AUTENTICACIÓN
 // ========================================
 
@@ -77,19 +93,28 @@ app.use('/', authRoutes);
 // MÓDULOS CON SESIÓN INDEPENDIENTE
 // ========================================
 
+// ADMINISTRADOR
 app.use(
     '/sesion/:sessionToken/admin/tickets',
     adminRoutes
 );
 
+// TÉCNICO
 app.use(
     '/sesion/:sessionToken/tecnico/tickets',
     tecnicoRoutes
 );
 
+// USUARIO
 app.use(
     '/sesion/:sessionToken/usuario/tickets',
     usuarioRoutes
+);
+
+// ACTIVIDADES
+app.use(
+    '/sesion/:sessionToken/actividades',
+    actividadesRoutes
 );
 
 // ========================================

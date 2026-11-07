@@ -27,14 +27,37 @@ html(lang="es")
                         span Sistema de Solicitudes
 
                     nav
+                        //- Dashboard
                         a(href=dashboardUrl)
                             i.fa-solid.fa-house
                             |  Dashboard
 
+                        //- Nueva solicitud para usuarios
                         if user.role === 'user'
                             a(href=nuevoTicketUrl)
                                 i.fa-solid.fa-plus
                                 |  Nueva Solicitud
+
+                        //- Módulo de actividades para administradores y técnicos
+                        if user.role === 'admin' || user.role === 'tecnico'
+                            a(href=`/sesion/${sessionToken}/actividades`)
+                                i.fa-solid.fa-inbox
+                                |  Capturas
+
+                            //- Tablero Kanban
+                            a(href=`/sesion/${sessionToken}/actividades/tablero`)
+                                i.fa-solid.fa-table-columns
+                                |  Tablero
+
+                            //- Actividades asignadas al colaborador
+                            a(href=`/sesion/${sessionToken}/actividades/mi-trabajo`)
+                                i.fa-solid.fa-briefcase
+                                |  Mi trabajo
+
+                            //- Métricas de productividad
+                            a(href=`/sesion/${sessionToken}/actividades/metricas`)
+                                i.fa-solid.fa-chart-line
+                                |  Métricas
 
                         //- Exportar Excel para administrador y técnico
                         if user.role === 'admin' || user.role === 'tecnico'
@@ -42,6 +65,7 @@ html(lang="es")
                                 i.fa-solid.fa-file-excel
                                 |  Exportar Excel
 
+                        //- Información del usuario
                         .user-info
                             span #{user.full_name || user.email}
                             span.role (#{user.role})
@@ -52,9 +76,11 @@ html(lang="es")
                                     i.fa-solid.fa-right-from-bracket
                                     |  Salir
 
+        //- Contenido principal
         main.container
             block content
 
+        //- Pie de página
         footer
             .container
                 p Sistema de Gestión de Tickets - Departamento de TI · Bodesa

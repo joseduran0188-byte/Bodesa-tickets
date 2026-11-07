@@ -1,0 +1,67 @@
+extends ../layout
+
+block content
+  .container
+    .page-header
+      div
+        h1 Métricas de Productividad
+        p Últimos #{dias} días · Capturas / Actividades
+
+      div(style="display:flex;gap:10px;align-items:center")
+        a.btn.btn-secondary(href=dashboardUrl) Volver a actividades
+        form(method="GET" action=dashboardUrl + "/metricas" style="display:flex;gap:8px")
+          select(name="dias" onchange="this.form.submit()")
+            option(value="7" selected=dias==7) 7 días
+            option(value="15" selected=dias==15) 15 días
+            option(value="30" selected=dias==30) 30 días
+            option(value="60" selected=dias==60) 60 días
+            option(value="90" selected=dias==90) 90 días
+
+    //- Resumen general
+    .detail-grid(style="margin-bottom:30px")
+      .detail-card
+        h3 Tomadas
+        p(style="font-size:2rem;font-weight:700;color:var(--primary)")= totales.tomadas
+      .detail-card
+        h3 Terminadas
+        p(style="font-size:2rem;font-weight:700;color:var(--warning)")= totales.terminadas
+      .detail-card
+        h3 Validadas
+        p(style="font-size:2rem;font-weight:700;color:var(--success)")= totales.validadas
+      .detail-card
+        h3 Liberadas
+        p(style="font-size:2rem;font-weight:700;color:var(--danger)")= totales.liberadas
+
+    if metricas && metricas.length
+      .tickets-table-wrapper
+        table.tickets-table
+          thead
+            tr
+              th Colaborador
+              th Tomadas
+              th Terminadas
+              th Validadas
+              th Liberadas
+              th Tiempo promedio (hrs)
+              th Efectividad
+          tbody
+            each m in metricas
+              - const efectividad = m.tomadas > 0 ? Math.round((m.validadas / m.tomadas) * 100) : 0
+              tr
+                td
+                  strong= m.full_name || m.email || 'Sin nombre'
+                  br
+                  small.text-muted= m.email
+                td= m.tomadas
+                td= m.terminadas
+                td
+                  span(class="badge badge-estado-resuelto")= m.validadas
+                td= m.liberadas
+                td= m.tiempo_promedio_horas > 0 ? m.tiempo_promedio_horas + ' h' : '—'
+                td
+                  span(class="badge " + (efectividad >= 80 ? "badge-estado-resuelto" : efectividad >= 50 ? "badge-estado-en_proceso" : "badge-alta"))
+                    = efectividad + '%'
+    else
+      .empty-state
+        h3 Sin datos aún
+        p Cuando el equipo empiece a tomar y validar actividades aparecerán aquí las métricas.

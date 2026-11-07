@@ -1,0 +1,94 @@
+
+extends ../layout
+
+block content
+    .container
+        .page-header
+            div
+                h2= activity.title
+                p Estado:
+                    span(class='badge badge-estado-' + activity.status)= activity.status
+
+            a.btn.btn-secondary(href=dashboardUrl) Volver
+
+        //- Información general de la actividad
+        .detail-card
+            .detail-item
+                strong Remitente:
+                span= activity.requester_name || '—'
+
+            .detail-item
+                strong Tipo:
+                span= activity.activity_type || '—'
+
+            .detail-item
+                strong Cantidad:
+                span= activity.quantity || '—'
+
+            .detail-item
+                strong Prioridad:
+                span= activity.priority
+
+            .detail-item
+                strong Observaciones:
+                p.descripcion= activity.observations || 'Sin observaciones'
+
+        //- Archivos adjuntos
+        if activity.attachments && activity.attachments.length
+            .form-card
+                h3
+                    i.fa-solid.fa-paperclip
+                    |  Archivos adjuntos
+
+                ul
+                    each file in activity.attachments
+                        li
+                            a(
+                                href=`/sesion/${sessionToken}/actividades/${activity.id}/adjunto/${file.id}`
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            )
+                                i.fa-solid.fa-paperclip
+                                |  #{file.file_name}
+
+                            if file.file_size
+                                small.text-muted
+                                    |  (#{Math.round(file.file_size / 1024)} KB)
+
+        //- Acciones de la actividad
+        .form-card
+            h3 Acciones
+
+            if activity.status === 'disponible' || activity.status === 'devuelta'
+                form(method='POST' action=dashboardUrl + '/' + activity.id + '/tomar')
+                    button.btn.btn-primary(type='submit') Tomar actividad
+
+            if activity.status === 'en_proceso' && (activity.current_responsible_id === user.id || user.role === 'admin')
+                form(
+                    method='POST'
+                    action=dashboardUrl + '/' + activity.id + '/terminar'
+                    style='display:inline-block;margin-right:8px'
+                )
+                    button.btn.btn-primary(type='submit') Marcar terminada
+
+                form(
+                    method='POST'
+                    action=dashboardUrl + '/' + activity.id + '/liberar'
+                    style='display:inline-block'
+                )
+                    button.btn.btn-secondary(type='submit') Liberar
+
+            if activity.status === 'pendiente_validacion' && user.role === 'admin'
+                form(
+                    method='POST'
+                    action=dashboardUrl + '/' + activity.id + '/validar'
+                    style='display:inline-block;margin-right:8px'
+                )
+                    button.btn.btn-primary(type='submit') Validar
+
+                form(
+                    method='POST'
+                    action=dashboardUrl + '/' + activity.id + '/devolver'
+                    style='display:inline-block'
+                )
+                    button.btn.btn-secondary(type='submit') Devolver

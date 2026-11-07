@@ -22,7 +22,8 @@
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "morgan": "^1.12.1",
-    "pug": "^3.0.4"
+    "pug": "^3.0.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

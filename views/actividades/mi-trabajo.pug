@@ -1,0 +1,55 @@
+extends ../layout
+
+block content
+  .container
+    .page-header
+      div
+        h1 Mi trabajo
+        p Actividades que tienes asignadas actualmente
+
+      a.btn.btn-secondary(href=dashboardUrl) Todas las capturas
+
+    if misActividades && misActividades.length
+      .tickets-table-wrapper
+        table.tickets-table
+          thead
+            tr
+              th Título
+              th Tipo
+              th Prioridad
+              th Estado
+              th Tomada
+              th Acciones
+          tbody
+            each act in misActividades
+              tr
+                td.ticket-title
+                  a(href=dashboardUrl + '/' + act.id)= act.title
+                td= act.activity_type || '—'
+                td
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+                td
+                  span(class='badge badge-estado-' + act.status)= act.status
+                td= act.started_at ? new Date(act.started_at).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' }) : '—'
+                td.actions
+                  .action-buttons
+                    a.action-btn.action-view(href=dashboardUrl + '/' + act.id)
+                      i.fa-solid.fa-eye
+                      span Ver
+
+                    if act.status === 'en_proceso'
+                      form.action-form(method='POST' action=dashboardUrl + '/' + act.id + '/terminar')
+                        button.action-btn.action-edit(type='submit')
+                          i.fa-solid.fa-check
+                          span Terminar
+
+                      form.action-form(method='POST' action=dashboardUrl + '/' + act.id + '/liberar')
+                        button.action-btn.action-delete(type='submit')
+                          i.fa-solid.fa-unlock
+                          span Liberar
+    else
+      .empty-state
+        i.fa-solid.fa-clipboard-check
+        h3 No tienes actividades asignadas
+        p Cuando tomes una captura aparecerá aquí.
+        a.btn.btn-primary(href=dashboardUrl) Ir a capturas disponibles

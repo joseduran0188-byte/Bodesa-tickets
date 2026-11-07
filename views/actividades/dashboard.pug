@@ -1,0 +1,40 @@
+extends ../layout
+
+block content
+  .container
+    .page-header
+      div
+        h1 Capturas / Actividades
+        p Bienvenido, #{user.full_name || user.email}
+
+    if activities && activities.length
+      .tickets-table-wrapper
+        table.tickets-table
+          thead
+            tr
+              th Título
+              th Remitente
+              th Tipo
+              th Cant.
+              th Prioridad
+              th Estado
+              th Responsable
+              th Acciones
+          tbody
+            each act in activities
+              tr
+                td.ticket-title= act.title
+                td= act.requester_name || '—'
+                td= act.activity_type || '—'
+                td= act.quantity || '—'
+                td
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+                td
+                  span(class='badge badge-estado-' + act.status)= act.status
+                td= act.current_responsible ? act.current_responsible.full_name : 'Sin asignar'
+                td.actions
+                  a.action-btn.action-view(href=dashboardUrl + '/' + act.id) Ver
+    else
+      .empty-state
+        h3 No hay actividades
+        p Las capturas aparecerán aquí cuando se registren.
