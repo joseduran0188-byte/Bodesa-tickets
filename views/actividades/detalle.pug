@@ -23,7 +23,7 @@ block content
 
             .detail-item
                 strong Cantidad:
-                span= activity.quantity ?? '—'
+                span= activity.quantity !== null && activity.quantity !== undefined ? activity.quantity : '—'
 
             .detail-item
                 strong Prioridad:
@@ -31,7 +31,7 @@ block content
 
             .detail-item
                 strong Responsable:
-                span= activity.current_responsible?.full_name || 'Sin asignar'
+                span= (activity.current_responsible && activity.current_responsible.full_name) || 'Sin asignar'
 
             .detail-item
                 strong Observaciones:
@@ -114,7 +114,7 @@ block content
                                     name='quantity'
                                     min='0'
                                     step='1'
-                                    value=activity.quantity ?? ''
+                                value=(activity.quantity !== null && activity.quantity !== undefined ? activity.quantity : '')
                                 )
 
                             .form-group
@@ -222,8 +222,7 @@ block content
 
                             p
                                 | Realizado por:
-                                |  #{item.actor?.full_name || 'Usuario no disponible'}
-
+                                |  |  #{(item.actor && item.actor.full_name) || 'Usuario no disponible'}
                             if item.previous_status || item.new_status
                                 p
                                     | Estado:
