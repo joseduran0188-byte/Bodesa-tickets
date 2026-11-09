@@ -44,6 +44,7 @@ app.use(
 // PROCESAMIENTO DE SOLICITUDES
 // ========================================
 
+// Formularios tradicionales
 app.use(
     express.urlencoded({
         extended: true,
@@ -51,9 +52,10 @@ app.use(
     })
 );
 
+// JSON: aumentado de 1 MB a 4 MB
 app.use(
     express.json({
-        limit: '1mb'
+        limit: '4mb'
     })
 );
 
@@ -83,8 +85,6 @@ app.use(
 
 // ========================================
 // WEBHOOK PÚBLICO
-// Debe registrarse antes de las rutas
-// que requieren autenticación.
 // ========================================
 
 app.use('/api/webhook', webhookRoutes);
@@ -153,8 +153,18 @@ app.use((err, req, res, next) => {
         return next(err);
     }
 
-    res.status(500).send(
-        'Ocurrió un error interno en el servidor.'
+    const status = Number(err.status || err.statusCode) || 500;
+
+    if (status === 413) {
+        return res.status(413).json({
+            error: 'La solicitud supera el límite permitido de 4 MB.'
+        });
+    }
+
+    res.status(status).send(
+        status >= 500
+            ? 'Ocurrió un error interno del servidor.'
+            : err.message
     );
 });
 
