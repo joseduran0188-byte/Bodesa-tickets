@@ -1,3 +1,4 @@
+
 extends ../layout
 
 block content
@@ -7,105 +8,188 @@ block content
         h1 Tablero de Capturas
         p Vista Kanban · Todas las actividades
 
-      div(style="display:flex;gap:10px")
+      div(style="display:flex;gap:10px;flex-wrap:wrap")
         a.btn.btn-secondary(href=dashboardUrl) Lista
         a.btn.btn-secondary(href=dashboardUrl + '/mi-trabajo') Mi trabajo
         a.btn.btn-secondary(href=dashboardUrl + '/metricas') Métricas
 
     .kanban-board
-      //- Columna: Disponible
+
+      //- DISPONIBLE
       .kanban-column
         .kanban-header.disponible
           h3 Disponible
           span.kanban-count= columnas.disponible.length
-        .kanban-cards
-          each act in columnas.disponible
-            .kanban-card
-              .kanban-card-title= act.title
-              .kanban-card-meta
-                if act.activity_type
-                  span.badge.badge-media= act.activity_type
-                span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
-              if act.requester_name
-                .kanban-card-requester= act.requester_name
-              .kanban-card-actions
-                form(method='POST' action=dashboardUrl + '/' + act.id + '/tomar')
-                  button.btn.btn-primary.btn-sm(type='submit') Tomar
-                a.btn.btn-secondary.btn-sm(href=dashboardUrl + '/' + act.id) Ver
 
-      //- Columna: En proceso
+        .kanban-cards
+          if columnas.disponible.length
+            each act in columnas.disponible
+              .kanban-card
+                .kanban-card-title= act.title
+
+                .kanban-card-meta
+                  if act.activity_type
+                    span.badge.badge-media= act.activity_type
+
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+
+                if act.requester_name
+                  .kanban-card-requester
+                    i.fa-solid.fa-user
+                    |  #{act.requester_name}
+
+                .kanban-card-actions
+                  form(
+                    method='POST'
+                    action=dashboardUrl + '/' + act.id + '/tomar'
+                  )
+                    button.btn.btn-primary.btn-sm(type='submit') Tomar
+
+                  a.btn.btn-secondary.btn-sm(
+                    href=dashboardUrl + '/' + act.id
+                  ) Ver
+          else
+            p.text-muted No hay actividades disponibles.
+
+      //- EN PROCESO
       .kanban-column
         .kanban-header.en-proceso
           h3 En proceso
           span.kanban-count= columnas.en_proceso.length
-        .kanban-cards
-          each act in columnas.en_proceso
-            .kanban-card
-              .kanban-card-title= act.title
-              .kanban-card-meta
-                if act.activity_type
-                  span.badge.badge-media= act.activity_type
-                span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
-              .kanban-card-responsible
-                i.fa-solid.fa-user
-                |  #{act.current_responsible ? act.current_responsible.full_name : 'Sin asignar'}
-              .kanban-card-actions
-                if act.current_responsible_id === user.id || user.role === 'admin'
-                  form(method='POST' action=dashboardUrl + '/' + act.id + '/terminar' style="display:inline")
-                    button.btn.btn-primary.btn-sm(type='submit') Terminar
-                  form(method='POST' action=dashboardUrl + '/' + act.id + '/liberar' style="display:inline")
-                    button.btn.btn-secondary.btn-sm(type='submit') Liberar
-                a.btn.btn-secondary.btn-sm(href=dashboardUrl + '/' + act.id) Ver
 
-      //- Columna: Pendiente de validación
+        .kanban-cards
+          if columnas.en_proceso.length
+            each act in columnas.en_proceso
+              .kanban-card
+                .kanban-card-title= act.title
+
+                .kanban-card-meta
+                  if act.activity_type
+                    span.badge.badge-media= act.activity_type
+
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+
+                .kanban-card-responsible
+                  i.fa-solid.fa-user
+                  |  #{(act.current_responsible && act.current_responsible.full_name) || 'Sin asignar'}
+
+                .kanban-card-actions
+                  if act.current_responsible_id === user.id || user.role === 'admin'
+                    form(
+                      method='POST'
+                      action=dashboardUrl + '/' + act.id + '/terminar'
+                      style="display:inline"
+                    )
+                      button.btn.btn-primary.btn-sm(type='submit') Terminar
+
+                    form(
+                      method='POST'
+                      action=dashboardUrl + '/' + act.id + '/liberar'
+                      style="display:inline"
+                    )
+                      button.btn.btn-secondary.btn-sm(type='submit') Liberar
+
+                  a.btn.btn-secondary.btn-sm(
+                    href=dashboardUrl + '/' + act.id
+                  ) Ver
+          else
+            p.text-muted No hay actividades en proceso.
+
+      //- PENDIENTE DE VALIDACIÓN
       .kanban-column
         .kanban-header.pendiente
           h3 Pendiente validación
           span.kanban-count= columnas.pendiente_validacion.length
-        .kanban-cards
-          each act in columnas.pendiente_validacion
-            .kanban-card
-              .kanban-card-title= act.title
-              .kanban-card-meta
-                if act.activity_type
-                  span.badge.badge-media= act.activity_type
-                span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
-              .kanban-card-responsible
-                i.fa-solid.fa-user
-                |  #{act.current_responsible ? act.current_responsible.full_name : '—'}
-              .kanban-card-actions
-                if user.role === 'admin'
-                  form(method='POST' action=dashboardUrl + '/' + act.id + '/validar' style="display:inline")
-                    button.btn.btn-primary.btn-sm(type='submit') Validar
-                  form(method='POST' action=dashboardUrl + '/' + act.id + '/devolver' style="display:inline")
-                    button.btn.btn-secondary.btn-sm(type='submit') Devolver
-                a.btn.btn-secondary.btn-sm(href=dashboardUrl + '/' + act.id) Ver
 
-      //- Columna: Devuelta
+        .kanban-cards
+          if columnas.pendiente_validacion.length
+            each act in columnas.pendiente_validacion
+              .kanban-card
+                .kanban-card-title= act.title
+
+                .kanban-card-meta
+                  if act.activity_type
+                    span.badge.badge-media= act.activity_type
+
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+
+                .kanban-card-responsible
+                  i.fa-solid.fa-user
+                  |  #{(act.current_responsible && act.current_responsible.full_name) || 'Sin asignar'}
+
+                .kanban-card-actions
+                  if user.role === 'admin'
+                    form(
+                      method='POST'
+                      action=dashboardUrl + '/' + act.id + '/validar'
+                      style="display:inline"
+                    )
+                      button.btn.btn-primary.btn-sm(type='submit') Validar
+
+                    form(
+                      method='POST'
+                      action=dashboardUrl + '/' + act.id + '/devolver'
+                      style="display:inline"
+                    )
+                      button.btn.btn-secondary.btn-sm(type='submit') Devolver
+
+                  a.btn.btn-secondary.btn-sm(
+                    href=dashboardUrl + '/' + act.id
+                  ) Ver
+          else
+            p.text-muted No hay actividades pendientes de validación.
+
+      //- DEVUELTA
       .kanban-column
         .kanban-header.devuelta
           h3 Devuelta
           span.kanban-count= columnas.devuelta.length
-        .kanban-cards
-          each act in columnas.devuelta
-            .kanban-card
-              .kanban-card-title= act.title
-              .kanban-card-meta
-                span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
-              .kanban-card-actions
-                form(method='POST' action=dashboardUrl + '/' + act.id + '/tomar')
-                  button.btn.btn-primary.btn-sm(type='submit') Retomar
-                a.btn.btn-secondary.btn-sm(href=dashboardUrl + '/' + act.id) Ver
 
-      //- Columna: Validadas (solo las más recientes)
+        .kanban-cards
+          if columnas.devuelta.length
+            each act in columnas.devuelta
+              .kanban-card
+                .kanban-card-title= act.title
+
+                .kanban-card-meta
+                  if act.activity_type
+                    span.badge.badge-media= act.activity_type
+
+                  span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))= act.priority
+
+                .kanban-card-actions
+                  form(
+                    method='POST'
+                    action=dashboardUrl + '/' + act.id + '/tomar'
+                  )
+                    button.btn.btn-primary.btn-sm(type='submit') Retomar
+
+                  a.btn.btn-secondary.btn-sm(
+                    href=dashboardUrl + '/' + act.id
+                  ) Ver
+          else
+            p.text-muted No hay actividades devueltas.
+
+      //- VALIDADAS
       .kanban-column
         .kanban-header.validada
           h3 Validadas
           span.kanban-count= columnas.validada.length
+
         .kanban-cards
-          each act in columnas.validada.slice(0, 15)
-            .kanban-card.validada-card
-              .kanban-card-title= act.title
-              .kanban-card-meta
-                span.badge.badge-estado-validada Validada
-              a.btn.btn-secondary.btn-sm(href=dashboardUrl + '/' + act.id) Ver
+          if columnas.validada.length
+            each act in columnas.validada.slice(0, 15)
+              .kanban-card.validada-card
+                .kanban-card-title= act.title
+
+                .kanban-card-meta
+                  span.badge.badge-estado-validada Validada
+
+                if act.requester_name
+                  .kanban-card-requester= act.requester_name
+
+                a.btn.btn-secondary.btn-sm(
+                  href=dashboardUrl + '/' + act.id
+                ) Ver
+          else
+            p.text-muted No hay actividades validadas.

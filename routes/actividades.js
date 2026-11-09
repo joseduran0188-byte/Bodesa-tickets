@@ -79,6 +79,21 @@ const PRIORIDADES_VALIDAS = [
   'urgente'
 ];
 
+const ORDEN_PRIORIDADES = {
+  urgente: 4,
+  alta: 3,
+  media: 2,
+  baja: 1
+};
+
+const ESTADOS_TABLERO = [
+  'disponible',
+  'en_proceso',
+  'pendiente_validacion',
+  'devuelta',
+  'validada'
+];
+
 // ========================================
 // DASHBOARD DE ACTIVIDADES
 // ========================================
@@ -88,7 +103,10 @@ router.get('/', async (req, res) => {
       .from('activities')
       .select(`
         *,
-        current_responsible:profiles!activities_current_responsible_id_fkey(full_name, email)
+        current_responsible:profiles!activities_current_responsible_id_fkey(
+          full_name,
+          email
+        )
       `)
       .order('received_at', {
         ascending: false,
@@ -210,29 +228,30 @@ router.get('/mi-trabajo', async (req, res) => {
 
 // ========================================
 // TABLERO KANBAN
+// IMPORTANTE: ESTA RUTA DEBE ESTAR ANTES
+// DE router.get('/:id').
 // ========================================
 router.get('/tablero', async (req, res) => {
   try {
     const { data: activities, error } = await req.supabase
       .from('activities')
-      .select('*')
-      .in('status', [
-        'disponible',
-        'en_proceso',
-        'pendiente_validacion',
-        'devuelta',
-        'validada'
-      ])
-      .order('priority', { ascending: false })
+      .select(`
+        *,
+        current_responsible:profiles!activities_current_responsible_id_fkey(
+          full_name,
+          email
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('ERROR TABLERO:', error);
+      console.error('ERROR CONSULTANDO ACTIVIDADES DEL TABLERO:', error);
       return res.status(500).send(
-        'No se pudo cargar el tablero'
+        'No se pudieron consultar las actividades del tablero'
       );
     }
 
+    // Crear todas las columnas, incluso cuando estén vacías.
     const columnas = {
       disponible: [],
       en_proceso: [],
@@ -241,10 +260,36 @@ router.get('/tablero', async (req, res) => {
       validada: []
     };
 
-    (activities || []).forEach(act => {
-      if (columnas[act.status]) {
-        columnas[act.status].push(act);
+    // Agrupar las actividades según su estado actual.
+    (activities || []).forEach((actividad) => {
+      if (ESTADOS_TABLERO.includes(actividad.status)) {
+        columnas[actividad.status].push(actividad);
       }
+    });
+
+    // Ordenar cada columna por prioridad y después por fecha.
+    Object.keys(columnas).forEach((estado) => {
+      columnas[estado].sort((a, b) => {
+        const prioridadA = ORDEN_PRIORIDADES[a.priority] || 0;
+        const prioridadB = ORDEN_PRIORIDADES[b.priority] || 0;
+
+        if (prioridadA !== prioridadB) {
+          return prioridadB - prioridadA;
+        }
+
+        return new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime();
+      });
+    });
+
+    // Mostrar cantidades en consola para facilitar diagnóstico.
+    console.log('TABLERO DE ACTIVIDADES:', {
+      totalConsultadas: (activities || []).length,
+      disponible: columnas.disponible.length,
+      en_proceso: columnas.en_proceso.length,
+      pendiente_validacion: columnas.pendiente_validacion.length,
+      devuelta: columnas.devuelta.length,
+      validada: columnas.validada.length
     });
 
     return res.render(
@@ -257,12 +302,14 @@ router.get('/tablero', async (req, res) => {
 
   } catch (err) {
     console.error('ERROR INTERNO TABLERO:', err);
-    return res.status(500).send('Error interno');
+    return res.status(500).send('Error interno al cargar el tablero');
   }
 });
 
 // ========================================
 // DETALLE DE ACTIVIDAD
+// IMPORTANTE: LAS RUTAS ESPECÍFICAS GET
+// DEBEN DECLARARSE ANTES DE ESTA RUTA.
 // ========================================
 router.get('/:id', async (req, res) => {
   try {
@@ -270,10 +317,16 @@ router.get('/:id', async (req, res) => {
       .from('activities')
       .select(`
         *,
-        current_responsible:profiles!activities_current_responsible_id_fkey(full_name, email),
+        current_responsible:profiles!activities_current_responsible_id_fkey(
+          full_name,
+          email
+        ),
         history:activity_history(
           *,
-          actor:profiles!activity_history_actor_id_fkey(full_name, email)
+          actor:profiles!activity_history_actor_id_fkey(
+            full_name,
+            email
+          )
         ),
         attachments:activity_attachments(*)
       `)
@@ -291,7 +344,6 @@ router.get('/:id', async (req, res) => {
       return res.status(404).send('Actividad no encontrada');
     }
 
-    // Historial más reciente primero.
     activity.history = (activity.history || []).sort(
       (a, b) =>
         new Date(b.created_at).getTime() -
@@ -319,7 +371,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
   try {
     const activityId = req.params.id;
 
-    // Obtener los datos actuales.
     const { data: anterior, error: readError } = await req.supabase
       .from('activities')
       .select('*')
@@ -370,7 +421,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       }
     }
 
-    // Solamente se modifican los campos administrativos permitidos.
     const cambios = {
       title,
       requester_name: textoOpcional(req.body.requester_name),
@@ -392,7 +442,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 
     const modificaciones = {};
 
-    camposAuditables.forEach(campo => {
+    camposAuditables.forEach((campo) => {
       const valorAnterior = anterior[campo] ?? null;
       const valorNuevo = cambios[campo] ?? null;
 
@@ -423,7 +473,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       );
     }
 
-    // Registrar los cambios en el historial.
     const { error: historyError } = await req.supabase
       .from('activity_history')
       .insert({
@@ -458,8 +507,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 });
 
 // ========================================
-// ELIMINACIÓN LÓGICA / CANCELAR ACTIVIDAD
-// SOLO ADMIN
+// CANCELAR ACTIVIDAD (SOLO ADMIN)
 // ========================================
 router.post('/:id/eliminar', requireAdmin, async (req, res) => {
   try {
@@ -516,7 +564,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       );
     }
 
-    // Conservar trazabilidad de la cancelación.
     const { error: historyError } = await req.supabase
       .from('activity_history')
       .insert({
@@ -546,7 +593,7 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
     );
 
   } catch (err) {
-    console.error('ERROR ELIMINACIÓN LÓGICA:', err);
+    console.error('ERROR CANCELAR ACTIVIDAD:', err);
     return res.status(500).send(
       'Error interno al cancelar la actividad'
     );
@@ -597,7 +644,6 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
 
 // ========================================
 // REACTIVAR ACTIVIDAD CANCELADA (SOLO ADMIN)
-// disponible o en_proceso con responsable anterior
 // ========================================
 router.post('/:id/reactivar', requireAdmin, async (req, res) => {
   try {
@@ -611,8 +657,6 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
       );
     }
 
-    // disponible = reactivar sin responsable.
-    // responsable = recuperar al responsable anterior.
     if (!['disponible', 'responsable'].includes(mode)) {
       return res.status(400).send(
         'Selecciona una modalidad de reactivación válida'
