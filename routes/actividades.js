@@ -54,9 +54,30 @@ function renderData(req, extra = {}) {
     sessionToken: req.params.sessionToken,
     dashboardUrl: baseUrl(req),
     logoutUrl: `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
+    formatDate: (date) => {
+      if (!date) return '—';
+
+      return new Date(date).toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    },
     ...extra
   };
 }
+
+function textoOpcional(value) {
+  const texto = String(value ?? '').trim();
+  return texto || null;
+}
+
+const PRIORIDADES_VALIDAS = [
+  'baja',
+  'media',
+  'alta',
+  'urgente'
+];
 
 // ========================================
 // DASHBOARD DE ACTIVIDADES
@@ -151,7 +172,7 @@ router.get('/metricas', async (req, res) => {
 });
 
 // ========================================
-// MI TRABAJO (SIN JOIN CON PROFILES)
+// MI TRABAJO
 // ========================================
 router.get('/mi-trabajo', async (req, res) => {
   try {
@@ -188,7 +209,7 @@ router.get('/mi-trabajo', async (req, res) => {
 });
 
 // ========================================
-// TABLERO KANBAN (SIN JOIN CON PROFILES)
+// TABLERO KANBAN
 // ========================================
 router.get('/tablero', async (req, res) => {
   try {
@@ -212,7 +233,6 @@ router.get('/tablero', async (req, res) => {
       );
     }
 
-    // Agrupar actividades por estado
     const columnas = {
       disponible: [],
       en_proceso: [],
@@ -251,7 +271,10 @@ router.get('/:id', async (req, res) => {
       .select(`
         *,
         current_responsible:profiles!activities_current_responsible_id_fkey(full_name, email),
-        history:activity_history(*, actor:profiles(full_name)),
+        history:activity_history(
+          *,
+          actor:profiles!activity_history_actor_id_fkey(full_name, email)
+        ),
         attachments:activity_attachments(*)
       `)
       .eq('id', req.params.id)
@@ -268,6 +291,13 @@ router.get('/:id', async (req, res) => {
       return res.status(404).send('Actividad no encontrada');
     }
 
+    // Historial más reciente primero.
+    activity.history = (activity.history || []).sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    );
+
     return res.render(
       'actividades/detalle',
       renderData(req, {
@@ -279,6 +309,247 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('ERROR DETALLE:', err);
     return res.status(500).send('Error');
+  }
+});
+
+// ========================================
+// EDITAR ACTIVIDAD (SOLO ADMIN)
+// ========================================
+router.post('/:id/editar', requireAdmin, async (req, res) => {
+  try {
+    const activityId = req.params.id;
+
+    // Obtener los datos actuales.
+    const { data: anterior, error: readError } = await req.supabase
+      .from('activities')
+      .select('*')
+      .eq('id', activityId)
+      .maybeSingle();
+
+    if (readError) {
+      console.error('ERROR CONSULTANDO ACTIVIDAD PARA EDITAR:', readError);
+      return res.status(500).send('No se pudo consultar la actividad');
+    }
+
+    if (!anterior) {
+      return res.status(404).send('Actividad no encontrada');
+    }
+
+    if (anterior.status === 'cancelada') {
+      return res.status(400).send(
+        'No se pueden editar actividades canceladas'
+      );
+    }
+
+    const title = String(req.body.title || '').trim();
+
+    if (!title) {
+      return res.status(400).send(
+        'El título de la actividad es obligatorio'
+      );
+    }
+
+    const priority = String(req.body.priority || '').toLowerCase();
+
+    if (!PRIORIDADES_VALIDAS.includes(priority)) {
+      return res.status(400).send('Prioridad no válida');
+    }
+
+    let quantity = null;
+
+    if (
+      req.body.quantity !== undefined &&
+      String(req.body.quantity).trim() !== ''
+    ) {
+      quantity = Number(req.body.quantity);
+
+      if (!Number.isInteger(quantity) || quantity < 0) {
+        return res.status(400).send(
+          'La cantidad debe ser un entero mayor o igual a cero'
+        );
+      }
+    }
+
+    // Solamente se modifican los campos administrativos permitidos.
+    const cambios = {
+      title,
+      requester_name: textoOpcional(req.body.requester_name),
+      activity_type: textoOpcional(req.body.activity_type),
+      quantity,
+      priority,
+      observations: textoOpcional(req.body.observations),
+      updated_at: new Date().toISOString()
+    };
+
+    const camposAuditables = [
+      'title',
+      'requester_name',
+      'activity_type',
+      'quantity',
+      'priority',
+      'observations'
+    ];
+
+    const modificaciones = {};
+
+    camposAuditables.forEach(campo => {
+      const valorAnterior = anterior[campo] ?? null;
+      const valorNuevo = cambios[campo] ?? null;
+
+      if (valorAnterior !== valorNuevo) {
+        modificaciones[campo] = {
+          anterior: valorAnterior,
+          nuevo: valorNuevo
+        };
+      }
+    });
+
+    if (Object.keys(modificaciones).length === 0) {
+      return res.redirect(
+        303,
+        `${baseUrl(req)}/${activityId}`
+      );
+    }
+
+    const { error: updateError } = await req.supabase
+      .from('activities')
+      .update(cambios)
+      .eq('id', activityId);
+
+    if (updateError) {
+      console.error('ERROR ACTUALIZANDO ACTIVIDAD:', updateError);
+      return res.status(500).send(
+        'No se pudieron guardar los cambios'
+      );
+    }
+
+    // Registrar los cambios en el historial.
+    const { error: historyError } = await req.supabase
+      .from('activity_history')
+      .insert({
+        activity_id: activityId,
+        actor_id: req.user.id,
+        action: 'actividad_editada',
+        previous_status: anterior.status,
+        new_status: anterior.status,
+        comments: 'Actividad modificada por el administrador',
+        metadata: {
+          cambios: modificaciones
+        }
+      });
+
+    if (historyError) {
+      console.error('ERROR REGISTRANDO EDICIÓN EN HISTORIAL:', historyError);
+
+      return res.status(500).send(
+        'Los cambios se guardaron, pero no se pudo registrar la modificación en el historial. Contacta al administrador del sistema.'
+      );
+    }
+
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
+
+  } catch (err) {
+    console.error('ERROR EDITAR ACTIVIDAD:', err);
+    return res.status(500).send('Error interno al editar actividad');
+  }
+});
+
+// ========================================
+// ELIMINACIÓN LÓGICA / CANCELAR ACTIVIDAD
+// SOLO ADMIN
+// ========================================
+router.post('/:id/eliminar', requireAdmin, async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    const reason = String(
+      req.body.cancellation_reason || ''
+    ).trim();
+
+    if (!reason) {
+      return res.status(400).send(
+        'Debes indicar el motivo de cancelación'
+      );
+    }
+
+    const { data: anterior, error: readError } = await req.supabase
+      .from('activities')
+      .select('id, status, title')
+      .eq('id', activityId)
+      .maybeSingle();
+
+    if (readError) {
+      console.error('ERROR CONSULTANDO ACTIVIDAD PARA CANCELAR:', readError);
+      return res.status(500).send(
+        'No se pudo consultar la actividad'
+      );
+    }
+
+    if (!anterior) {
+      return res.status(404).send('Actividad no encontrada');
+    }
+
+    if (anterior.status === 'cancelada') {
+      return res.status(400).send(
+        'La actividad ya se encuentra cancelada'
+      );
+    }
+
+    const ahora = new Date().toISOString();
+
+    const { error: updateError } = await req.supabase
+      .from('activities')
+      .update({
+        status: 'cancelada',
+        canceled_at: ahora,
+        cancellation_reason: reason,
+        updated_at: ahora
+      })
+      .eq('id', activityId);
+
+    if (updateError) {
+      console.error('ERROR CANCELANDO ACTIVIDAD:', updateError);
+      return res.status(500).send(
+        'No se pudo cancelar la actividad'
+      );
+    }
+
+    // Conservar trazabilidad de la cancelación.
+    const { error: historyError } = await req.supabase
+      .from('activity_history')
+      .insert({
+        activity_id: activityId,
+        actor_id: req.user.id,
+        action: 'actividad_cancelada',
+        previous_status: anterior.status,
+        new_status: 'cancelada',
+        comments: reason,
+        metadata: {
+          cancellation_reason: reason,
+          title: anterior.title
+        }
+      });
+
+    if (historyError) {
+      console.error('ERROR REGISTRANDO CANCELACIÓN:', historyError);
+
+      return res.status(500).send(
+        'La actividad fue cancelada, pero no se pudo registrar la acción en el historial. Contacta al administrador del sistema.'
+      );
+    }
+
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
+
+  } catch (err) {
+    console.error('ERROR ELIMINACIÓN LÓGICA:', err);
+    return res.status(500).send(
+      'Error interno al cancelar la actividad'
+    );
   }
 });
 

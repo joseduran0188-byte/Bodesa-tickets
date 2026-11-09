@@ -11,7 +11,7 @@ block content
 
             a.btn.btn-secondary(href=dashboardUrl) Volver
 
-        //- Información general de la actividad
+        //- Información general
         .detail-card
             .detail-item
                 strong Remitente:
@@ -23,15 +23,28 @@ block content
 
             .detail-item
                 strong Cantidad:
-                span= activity.quantity || '—'
+                span= activity.quantity ?? '—'
 
             .detail-item
                 strong Prioridad:
                 span= activity.priority
 
             .detail-item
+                strong Responsable:
+                span= activity.current_responsible?.full_name || 'Sin asignar'
+
+            .detail-item
                 strong Observaciones:
                 p.descripcion= activity.observations || 'Sin observaciones'
+
+            if activity.status === 'cancelada'
+                .detail-item
+                    strong Fecha de cancelación:
+                    span= formatDate(activity.canceled_at)
+
+                .detail-item
+                    strong Motivo de cancelación:
+                    p= activity.cancellation_reason || 'Sin motivo registrado'
 
         //- Archivos adjuntos
         if activity.attachments && activity.attachments.length
@@ -55,12 +68,114 @@ block content
                                 small.text-muted
                                     |  (#{Math.round(file.file_size / 1024)} KB)
 
-        //- Acciones de la actividad
+        //- ADMINISTRACIÓN
+        if user.role === 'admin'
+            .form-card
+                h3 Administración de actividad
+
+                if activity.status !== 'cancelada'
+                    details
+                        summary.btn.btn-primary Editar actividad
+
+                        form(
+                            method='POST'
+                            action=dashboardUrl + '/' + activity.id + '/editar'
+                        )
+                            .form-group
+                                label(for='title') Título
+                                input#title.form-control(
+                                    type='text'
+                                    name='title'
+                                    value=activity.title
+                                    required
+                                    maxlength='500'
+                                )
+
+                            .form-group
+                                label(for='requester_name') Remitente
+                                input#requester_name.form-control(
+                                    type='text'
+                                    name='requester_name'
+                                    value=activity.requester_name || ''
+                                )
+
+                            .form-group
+                                label(for='activity_type') Tipo de actividad
+                                input#activity_type.form-control(
+                                    type='text'
+                                    name='activity_type'
+                                    value=activity.activity_type || ''
+                                )
+
+                            .form-group
+                                label(for='quantity') Cantidad
+                                input#quantity.form-control(
+                                    type='number'
+                                    name='quantity'
+                                    min='0'
+                                    step='1'
+                                    value=activity.quantity ?? ''
+                                )
+
+                            .form-group
+                                label(for='priority') Prioridad
+                                select#priority.form-control(
+                                    name='priority'
+                                    required
+                                )
+                                    option(value='baja' selected=activity.priority === 'baja') Baja
+                                    option(value='media' selected=activity.priority === 'media') Media
+                                    option(value='alta' selected=activity.priority === 'alta') Alta
+                                    option(value='urgente' selected=activity.priority === 'urgente') Urgente
+
+                            .form-group
+                                label(for='observations') Observaciones
+                                textarea#observations.form-control(
+                                    name='observations'
+                                    rows='8'
+                                )= activity.observations || ''
+
+                            button.btn.btn-primary(type='submit') Guardar cambios
+
+                    hr
+
+                    details
+                        summary.btn.btn-danger Cancelar actividad
+
+                        p.text-muted
+                            | La actividad pasará al estado cancelada. 
+                            | Se conservarán sus archivos y su historial.
+
+                        form(
+                            method='POST'
+                            action=dashboardUrl + '/' + activity.id + '/eliminar'
+                            onsubmit="return confirm('¿Estás seguro de cancelar esta actividad?');"
+                        )
+                            .form-group
+                                label(for='cancellation_reason') Motivo de cancelación
+                                textarea#cancellation_reason.form-control(
+                                    name='cancellation_reason'
+                                    rows='3'
+                                    required
+                                    maxlength='2000'
+                                    placeholder='Describe por qué se cancela esta actividad...'
+                                )
+
+                            button.btn.btn-danger(type='submit') Confirmar cancelación
+
+                else
+                    p.text-muted
+                        | Esta actividad está cancelada. Se conservan sus datos, archivos e historial.
+
+        //- ACCIONES OPERATIVAS
         .form-card
             h3 Acciones
 
             if activity.status === 'disponible' || activity.status === 'devuelta'
-                form(method='POST' action=dashboardUrl + '/' + activity.id + '/tomar')
+                form(
+                    method='POST'
+                    action=dashboardUrl + '/' + activity.id + '/tomar'
+                )
                     button.btn.btn-primary(type='submit') Tomar actividad
 
             if activity.status === 'en_proceso' && (activity.current_responsible_id === user.id || user.role === 'admin')
@@ -92,3 +207,45 @@ block content
                     style='display:inline-block'
                 )
                     button.btn.btn-secondary(type='submit') Devolver
+
+        //- HISTORIAL
+        .form-card
+            h3
+                i.fa-solid.fa-clock-rotate-left
+                |  Historial de actividad
+
+            if activity.history && activity.history.length
+                .activity-history
+                    each item in activity.history
+                        .detail-item
+                            strong= item.action
+
+                            p
+                                | Realizado por:
+                                |  #{item.actor?.full_name || 'Usuario no disponible'}
+
+                            if item.previous_status || item.new_status
+                                p
+                                    | Estado:
+                                    |  #{item.previous_status || '—'}
+                                    |  →
+                                    |  #{item.new_status || '—'}
+
+                            if item.comments
+                                p= item.comments
+
+                            if item.metadata && item.metadata.cambios
+                                details
+                                    summary Ver modificaciones
+                                    ul
+                                        each value, field in item.metadata.cambios
+                                            li
+                                                strong= field
+                                                p Anterior: #{value.anterior ?? '—'}
+                                                p Nuevo: #{value.nuevo ?? '—'}
+
+                            small.text-muted= formatDate(item.created_at)
+
+                            hr
+            else
+                p.text-muted Todavía no hay acciones registradas.
