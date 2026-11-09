@@ -110,12 +110,12 @@ block content
                             .form-group
                                 label(for='quantity') Cantidad
                                 input#quantity.form-control(
-                                    type='number'
-                                    name='quantity'
-                                    min='0'
-                                    step='1'
+                                type='number'
+                                name='quantity'
+                                min='0'
+                                step='1'
                                 value=(activity.quantity !== null && activity.quantity !== undefined ? activity.quantity : '')
-                                )
+)
 
                             .form-group
                                 label(for='priority') Prioridad
@@ -240,8 +240,8 @@ block content
                                         each value, field in item.metadata.cambios
                                             li
                                                 strong= field
-                                                p Anterior: #{value.anterior ?? '—'}
-                                                p Nuevo: #{value.nuevo ?? '—'}
+                                                p Anterior: #{value.anterior !== null && value.anterior !== undefined ? value.anterior : '—'}
+                                                p Nuevo: #{value.nuevo !== null && value.nuevo !== undefined ? value.nuevo : '—'}
 
                             small.text-muted= formatDate(item.created_at)
 
