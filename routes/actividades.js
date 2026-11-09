@@ -554,6 +554,100 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
 });
 
 // ========================================
+// DESVALIDAR ACTIVIDAD (SOLO ADMIN)
+// validada -> disponible
+// ========================================
+router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    const reason = String(req.body.reason || '').trim();
+
+    if (!reason) {
+      return res.status(400).send(
+        'Debes indicar el motivo de la desvalidación'
+      );
+    }
+
+    const { error } = await req.supabase.rpc(
+      'desvalidar_actividad',
+      {
+        p_activity_id: activityId,
+        p_reason: reason
+      }
+    );
+
+    if (error) {
+      console.error('ERROR DESVALIDAR ACTIVIDAD:', error);
+      throw error;
+    }
+
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
+
+  } catch (err) {
+    console.error('ERROR DESVALIDAR ACTIVIDAD:', err);
+
+    return res.status(400).send(
+      err.message || 'No se pudo desvalidar la actividad'
+    );
+  }
+});
+
+// ========================================
+// REACTIVAR ACTIVIDAD CANCELADA (SOLO ADMIN)
+// disponible o en_proceso con responsable anterior
+// ========================================
+router.post('/:id/reactivar', requireAdmin, async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    const reason = String(req.body.reason || '').trim();
+    const mode = String(req.body.mode || '').trim();
+
+    if (!reason) {
+      return res.status(400).send(
+        'Debes indicar el motivo de la reactivación'
+      );
+    }
+
+    // disponible = reactivar sin responsable.
+    // responsable = recuperar al responsable anterior.
+    if (!['disponible', 'responsable'].includes(mode)) {
+      return res.status(400).send(
+        'Selecciona una modalidad de reactivación válida'
+      );
+    }
+
+    const { error } = await req.supabase.rpc(
+      'reactivar_actividad',
+      {
+        p_activity_id: activityId,
+        p_keep_responsible: mode === 'responsable',
+        p_reason: reason
+      }
+    );
+
+    if (error) {
+      console.error('ERROR RPC REACTIVAR ACTIVIDAD:', error);
+      throw error;
+    }
+
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
+
+  } catch (err) {
+    console.error('ERROR REACTIVAR ACTIVIDAD:', err);
+
+    return res.status(400).send(
+      err.message || 'No se pudo reactivar la actividad'
+    );
+  }
+});
+
+// ========================================
 // DESCARGAR ADJUNTO
 // ========================================
 router.get('/:id/adjunto/:attachmentId', async (req, res) => {

@@ -11,7 +11,7 @@ block content
 
             a.btn.btn-secondary(href=dashboardUrl) Volver
 
-        //- Información general
+        //- INFORMACIÓN GENERAL
         .detail-card
             .detail-item
                 strong Remitente:
@@ -46,7 +46,7 @@ block content
                     strong Motivo de cancelación:
                     p= activity.cancellation_reason || 'Sin motivo registrado'
 
-        //- Archivos adjuntos
+        //- ARCHIVOS ADJUNTOS
         if activity.attachments && activity.attachments.length
             .form-card
                 h3
@@ -73,6 +73,7 @@ block content
             .form-card
                 h3 Administración de actividad
 
+                //- EDICIÓN Y CANCELACIÓN
                 if activity.status !== 'cancelada'
                     details
                         summary.btn.btn-primary Editar actividad
@@ -110,12 +111,12 @@ block content
                             .form-group
                                 label(for='quantity') Cantidad
                                 input#quantity.form-control(
-                                type='number'
-                                name='quantity'
-                                min='0'
-                                step='1'
-                                value=(activity.quantity !== null && activity.quantity !== undefined ? activity.quantity : '')
-)
+                                    type='number'
+                                    name='quantity'
+                                    min='0'
+                                    step='1'
+                                    value=(activity.quantity !== null && activity.quantity !== undefined ? activity.quantity : '')
+                                )
 
                             .form-group
                                 label(for='priority') Prioridad
@@ -143,7 +144,7 @@ block content
                         summary.btn.btn-danger Cancelar actividad
 
                         p.text-muted
-                            | La actividad pasará al estado cancelada. 
+                            | La actividad pasará al estado cancelada.
                             | Se conservarán sus archivos y su historial.
 
                         form(
@@ -166,6 +167,73 @@ block content
                 else
                     p.text-muted
                         | Esta actividad está cancelada. Se conservan sus datos, archivos e historial.
+
+                //- DESVALIDAR ACTIVIDAD
+                if activity.status === 'validada'
+                    hr
+
+                    details
+                        summary.btn.btn-secondary Desvalidar actividad
+
+                        p.text-muted
+                            | La actividad regresará al estado disponible y quedará sin responsable.
+                            | Se conservarán los archivos, las asignaciones anteriores y el historial.
+
+                        form(
+                            method='POST'
+                            action=dashboardUrl + '/' + activity.id + '/desvalidar'
+                            onsubmit="return confirm('¿Deseas desvalidar esta actividad?');"
+                        )
+                            .form-group
+                                label(for='desvalidation_reason') Motivo de desvalidación
+                                textarea#desvalidation_reason.form-control(
+                                    name='reason'
+                                    rows='3'
+                                    required
+                                    maxlength='2000'
+                                    placeholder='Describe por qué se desvalida esta actividad...'
+                                )
+
+                            button.btn.btn-secondary(type='submit') Confirmar desvalidación
+
+                //- REACTIVAR ACTIVIDAD CANCELADA
+                if activity.status === 'cancelada'
+                    hr
+
+                    details
+                        summary.btn.btn-primary Reactivar actividad
+
+                        p.text-muted
+                            | Puedes devolver la actividad a la lista de disponibles o recuperarla
+                            | en proceso conservando su último responsable, si existe.
+
+                        form(
+                            method='POST'
+                            action=dashboardUrl + '/' + activity.id + '/reactivar'
+                            onsubmit="return confirm('¿Deseas reactivar esta actividad?');"
+                        )
+                            .form-group
+                                label(for='reactivation_mode') Modalidad de reactivación
+
+                                select#reactivation_mode.form-control(
+                                    name='mode'
+                                    required
+                                )
+                                    option(value='disponible') Disponible (sin responsable)
+                                    option(value='responsable') En proceso (conservar último responsable)
+
+                            .form-group
+                                label(for='reactivation_reason') Motivo de reactivación
+
+                                textarea#reactivation_reason.form-control(
+                                    name='reason'
+                                    rows='3'
+                                    required
+                                    maxlength='2000'
+                                    placeholder='Describe por qué se reactiva esta actividad...'
+                                )
+
+                            button.btn.btn-primary(type='submit') Confirmar reactivación
 
         //- ACCIONES OPERATIVAS
         .form-card
@@ -222,7 +290,8 @@ block content
 
                             p
                                 | Realizado por:
-                                |  |  #{(item.actor && item.actor.full_name) || 'Usuario no disponible'}
+                                |  #{(item.actor && item.actor.full_name) || 'Usuario no disponible'}
+
                             if item.previous_status || item.new_status
                                 p
                                     | Estado:
