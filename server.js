@@ -44,14 +44,18 @@ app.use(
 // PROCESAMIENTO DE SOLICITUDES
 // ========================================
 
-app.use(express.urlencoded({
-    extended: true,
-    limit: '1mb'
-}));
+app.use(
+    express.urlencoded({
+        extended: true,
+        limit: '1mb'
+    })
+);
 
-app.use(express.json({
-    limit: '1mb'
-}));
+app.use(
+    express.json({
+        limit: '1mb'
+    })
+);
 
 // ========================================
 // EVITAR CACHÉ DE INFORMACIÓN PRIVADA
@@ -79,6 +83,8 @@ app.use(
 
 // ========================================
 // WEBHOOK PÚBLICO
+// Debe registrarse antes de las rutas
+// que requieren autenticación.
 // ========================================
 
 app.use('/api/webhook', webhookRoutes);
@@ -111,7 +117,10 @@ app.use(
     usuarioRoutes
 );
 
-// ACTIVIDADES
+// ========================================
+// MÓDULO DE ACTIVIDADES
+// ========================================
+
 app.use(
     '/sesion/:sessionToken/actividades',
     actividadesRoutes
@@ -160,5 +169,9 @@ if (require.main === module) {
         console.log(`Servidor iniciado en el puerto ${PORT}`);
     });
 }
+
+// ========================================
+// EXPORTAR APLICACIÓN
+// ========================================
 
 module.exports = app;

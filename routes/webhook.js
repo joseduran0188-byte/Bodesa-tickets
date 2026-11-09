@@ -6,7 +6,11 @@ const router = express.Router();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'EiB-X4NyaC8NAN3Oru74EsLrZ5B3IrKIn1p23sKx2ud0GtPt0_dAvJ2AUHpsklMF';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !WEBHOOK_SECRET) {
+  console.error('Faltan SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY o WEBHOOK_SECRET');
+}
 
 const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
@@ -16,16 +20,17 @@ router.post('/capturas', async (req, res) => {
   try {
     const payload = req.body || {};
 
-    if (payload.secret !== WEBHOOK_SECRET) {
+    // Seguridad
+    if (!payload.secret || payload.secret !== WEBHOOK_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const title = (payload.subject || '').trim();
+    const title = (payload.subject || '').toString().trim();
     if (!title) {
       return res.status(400).json({ error: 'subject es obligatorio' });
     }
 
-    // Evitar duplicados
+    // Evitar duplicados por message_id
     if (payload.message_id) {
       const { data: existing } = await supabaseAdmin
         .from('activities')
@@ -39,9 +44,14 @@ router.post('/capturas', async (req, res) => {
       }
     }
 
-    const priority = ['baja', 'media', 'alta', 'urgente'].includes(
-      (payload.priority || '').toLowerCase()
-    ) ? payload.priority.toLowerCase() : 'media';
+    // Detectar prioridad automática
+    let priority = 'media';
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('urgente') || lowerTitle.includes('urgent')) {
+      priority = 'urgente';
+    } else if (payload.priority && ['baja', 'media', 'alta', 'urgente'].includes(payload.priority.toLowerCase())) {
+      priority = payload.priority.toLowerCase();
+    }
 
     const activity = {
       source_type: 'outlook',
@@ -49,7 +59,7 @@ router.post('/capturas', async (req, res) => {
       title,
       requester_name: payload.from_name || null,
       requester_email: payload.from_email || null,
-      quantity: Number.isInteger(payload.quantity) ? payload.quantity : null,
+      quantity: Number.isInteger(Number(payload.quantity)) ? Number(payload.quantity) : null,
       priority,
       activity_type: payload.activity_type || null,
       observations: payload.observations || payload.body_preview || null,
@@ -75,21 +85,17 @@ router.post('/capturas', async (req, res) => {
       activity_id: created.id,
       action: 'creada_por_correo',
       new_status: 'disponible',
-      comments: 'Ingresada desde Outlook / Power Automate'
+      comments: 'Ingresada automáticamente desde Outlook / Power Automate'
     });
 
-    // ========== ADJUNTOS ==========
-    // Power Automate puede enviar:
-    // "attachments": [
-    //   { "name": "archivo.xlsx", "contentType": "application/vnd.openxmlformats...", "contentBytes": "base64..." }
-    // ]
+    // Adjuntos (si vienen en base64)
     if (Array.isArray(payload.attachments) && payload.attachments.length > 0) {
       for (const att of payload.attachments) {
         try {
           if (!att.name || !att.contentBytes) continue;
 
           const buffer = Buffer.from(att.contentBytes, 'base64');
-          const ext = att.name.split('.').pop() || 'bin';
+          const ext = (att.name.split('.').pop() || 'bin').toLowerCase();
           const storagePath = `${created.id}/${randomUUID()}.${ext}`;
 
           const { error: uploadError } = await supabaseAdmin.storage
@@ -100,7 +106,7 @@ router.post('/capturas', async (req, res) => {
             });
 
           if (uploadError) {
-            console.error('Error subiendo adjunto:', uploadError);
+            console.error('Error subiendo adjunto:', uploadError.message);
             continue;
           }
 
@@ -112,7 +118,7 @@ router.post('/capturas', async (req, res) => {
             mime_type: att.contentType || null
           });
         } catch (attErr) {
-          console.error('Error procesando adjunto:', attErr);
+          console.error('Error procesando adjunto:', attErr.message);
         }
       }
     }
@@ -120,7 +126,7 @@ router.post('/capturas', async (req, res) => {
     return res.status(201).json({ ok: true, id: created.id });
   } catch (err) {
     console.error('ERROR WEBHOOK:', err);
-    return res.status(500).json({ error: 'Error interno' });
+    return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 

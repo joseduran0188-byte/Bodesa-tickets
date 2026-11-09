@@ -89,7 +89,7 @@ router.get('/', async (req, res) => {
     );
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR DASHBOARD:', err);
     return res.status(500).send('Error interno');
   }
 });
@@ -151,16 +151,13 @@ router.get('/metricas', async (req, res) => {
 });
 
 // ========================================
-// MI TRABAJO (REEMPLAZO DE PLANNER)
+// MI TRABAJO (SIN JOIN CON PROFILES)
 // ========================================
 router.get('/mi-trabajo', async (req, res) => {
   try {
     const { data: misActividades, error } = await req.supabase
       .from('activities')
-      .select(`
-        *,
-        current_responsible:profiles!activities_current_responsible_id_fkey(full_name, email)
-      `)
+      .select('*')
       .eq('current_responsible_id', req.user.id)
       .in('status', [
         'en_proceso',
@@ -191,25 +188,13 @@ router.get('/mi-trabajo', async (req, res) => {
 });
 
 // ========================================
-// TABLERO KANBAN
+// TABLERO KANBAN (SIN JOIN CON PROFILES)
 // ========================================
 router.get('/tablero', async (req, res) => {
   try {
     const { data: activities, error } = await req.supabase
       .from('activities')
-      .select(`
-        id,
-        title,
-        requester_name,
-        activity_type,
-        quantity,
-        priority,
-        status,
-        started_at,
-        submitted_at,
-        current_responsible_id,
-        current_responsible:profiles!activities_current_responsible_id_fkey(full_name)
-      `)
+      .select('*')
       .in('status', [
         'disponible',
         'en_proceso',
@@ -218,7 +203,7 @@ router.get('/tablero', async (req, res) => {
         'validada'
       ])
       .order('priority', { ascending: false })
-      .order('received_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('ERROR TABLERO:', error);
@@ -292,7 +277,7 @@ router.get('/:id', async (req, res) => {
     );
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR DETALLE:', err);
     return res.status(500).send('Error');
   }
 });
@@ -373,7 +358,7 @@ router.post('/:id/tomar', async (req, res) => {
     );
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR TOMAR ACTIVIDAD:', err);
 
     return res.status(400).send(
       err.message || 'No se pudo tomar la actividad'
@@ -396,7 +381,7 @@ router.post('/:id/liberar', async (req, res) => {
     return res.redirect(303, baseUrl(req));
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR LIBERAR ACTIVIDAD:', err);
 
     return res.status(400).send(
       err.message || 'No se pudo liberar'
@@ -421,7 +406,7 @@ router.post('/:id/terminar', async (req, res) => {
     );
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR TERMINAR ACTIVIDAD:', err);
 
     return res.status(400).send(
       err.message || 'No se pudo marcar terminada'
@@ -443,7 +428,7 @@ router.post('/:id/validar', requireAdmin, async (req, res) => {
     return res.redirect(303, baseUrl(req));
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR VALIDAR ACTIVIDAD:', err);
 
     return res.status(400).send(
       err.message || 'No se pudo validar'
@@ -461,12 +446,12 @@ router.post('/:id/devolver', requireAdmin, async (req, res) => {
       p_reason: req.body.reason || 'Devuelta'
     });
 
-    if (error) throw err;
+    if (error) throw error;
 
     return res.redirect(303, baseUrl(req));
 
   } catch (err) {
-    console.error(err);
+    console.error('ERROR DEVOLVER ACTIVIDAD:', err);
 
     return res.status(400).send(
       err.message || 'No se pudo devolver'
