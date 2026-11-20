@@ -14,6 +14,7 @@ const {
 const router = express.Router();
 
 const BUCKET_ADJUNTOS = 'activity-attachments';
+const DIAGNOSTICO_WEBHOOK = true;
 
 const PRIORIDADES_VALIDAS = [
   'baja',
@@ -35,7 +36,9 @@ function getSupabaseAdmin() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error('Faltan las variables de configuración de Supabase.');
+    throw new Error(
+      'Faltan las variables de configuración de Supabase.'
+    );
   }
 
   supabaseAdmin = createClient(url, key, {
@@ -61,20 +64,42 @@ function textoOpcional(value) {
 function validarSecreto(recibido) {
   const esperado = process.env.WEBHOOK_SECRET;
 
-  if (
-    typeof recibido !== 'string' ||
-    !esperado
-  ) {
+  const recibidoValido = typeof recibido === 'string';
+  const esperadoConfigurado =
+    typeof esperado === 'string' && esperado.length > 0;
+
+  const longitudRecibida = recibidoValido
+    ? Buffer.byteLength(recibido, 'utf8')
+    : 0;
+
+  const longitudEsperada = esperadoConfigurado
+    ? Buffer.byteLength(esperado, 'utf8')
+    : 0;
+
+  if (DIAGNOSTICO_WEBHOOK) {
+    console.log('====== DIAGNOSTICO WEBHOOK ======');
+    console.log('Secreto recibido como texto:', recibidoValido);
+    console.log('Secreto configurado:', esperadoConfigurado);
+    console.log('Longitud recibida:', longitudRecibida);
+    console.log('Longitud configurada:', longitudEsperada);
+    console.log('Coinciden longitudes:',
+      longitudRecibida === longitudEsperada
+    );
+    console.log('=================================');
+  }
+
+  if (!recibidoValido || !esperadoConfigurado) {
     return false;
   }
 
-  const a = Buffer.from(recibido);
-  const b = Buffer.from(esperado);
+  const a = Buffer.from(recibido, 'utf8');
+  const b = Buffer.from(esperado, 'utf8');
 
-  return (
-    a.length === b.length &&
-    timingSafeEqual(a, b)
-  );
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return timingSafeEqual(a, b);
 }
 
 function obtenerFecha(value) {
@@ -170,7 +195,6 @@ async function procesarAdjuntos(activityId, attachments) {
       storagePath =
         `${activityId}/${randomUUID()}.${extension}`;
 
-      // Subir archivo a Storage
       const { error: uploadError } = await db.storage
         .from(BUCKET_ADJUNTOS)
         .upload(storagePath, buffer, {
@@ -184,7 +208,6 @@ async function procesarAdjuntos(activityId, attachments) {
         throw uploadError;
       }
 
-      // Registrar información del archivo
       const { error: insertError } = await db
         .from('activity_attachments')
         .insert({
@@ -218,13 +241,33 @@ async function procesarAdjuntos(activityId, attachments) {
       console.error(
         'ERROR PROCESANDO ADJUNTO:',
         att?.name,
-        error
+        error.message
       );
     }
   }
 
   return resultados;
 }
+
+// ========================================
+// DIAGNOSTICO DE CONFIGURACION
+// ========================================
+
+router.get('/diagnostico', (req, res) => {
+  return res.status(200).json({
+    ok: true,
+    webhook: 'activo',
+    configuracion: {
+      webhook_secret: Boolean(process.env.WEBHOOK_SECRET),
+      supabase_url: Boolean(process.env.SUPABASE_URL),
+      supabase_service_role_key: Boolean(
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+    },
+    mensaje:
+      'Diagnóstico de variables completado. No se muestran secretos.'
+  });
+});
 
 // ========================================
 // WEBHOOK OUTLOOK
@@ -235,11 +278,30 @@ router.post('/capturas', async (req, res) => {
   try {
     const payload = req.body || {};
 
+    if (DIAGNOSTICO_WEBHOOK) {
+      console.log('====== SOLICITUD RECIBIDA ======');
+      console.log('Método:', req.method);
+      console.log('Content-Type:', req.headers['content-type']);
+      console.log('Body recibido como objeto:',
+        typeof payload === 'object' && payload !== null
+      );
+      console.log('Se recibió propiedad secret:',
+        Object.prototype.hasOwnProperty.call(payload, 'secret')
+      );
+      console.log('================================');
+    }
+
     // 1. Validar secreto
     if (!validarSecreto(payload.secret)) {
       return res.status(401).json({
         ok: false,
-        error: 'No autorizado'
+        error: 'No autorizado',
+        diagnostico: {
+          secret_recibido: typeof payload.secret === 'string',
+          secret_configurado: Boolean(
+            process.env.WEBHOOK_SECRET
+          )
+        }
       });
     }
 
@@ -272,7 +334,7 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 4. Validar fecha de recepción
+    // 4. Validar fecha
     const receivedAt = obtenerFecha(payload.received_at);
 
     if (!receivedAt) {
@@ -287,7 +349,7 @@ router.post('/capturas', async (req, res) => {
       ? payload.attachments
       : [];
 
-    // 6. Evitar correos duplicados
+    // 6. Evitar duplicados
     const { data: existing, error: duplicateError } = await db
       .from('activities')
       .select('id')
@@ -366,7 +428,7 @@ router.post('/capturas', async (req, res) => {
       }
     }
 
-    // 10. Preparar actividad según tu tabla actual
+    // 10. Preparar actividad
     const activity = {
       source_type: 'outlook',
       source_email_id: messageId,
