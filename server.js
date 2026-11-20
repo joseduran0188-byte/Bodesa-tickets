@@ -44,7 +44,6 @@ app.use(
 // PROCESAMIENTO DE SOLICITUDES
 // ========================================
 
-// Formularios tradicionales
 app.use(
     express.urlencoded({
         extended: true,
@@ -52,7 +51,6 @@ app.use(
     })
 );
 
-// JSON: aumentado de 1 MB a 4 MB
 app.use(
     express.json({
         limit: '4mb'
@@ -84,7 +82,8 @@ app.use(
 );
 
 // ========================================
-// WEBHOOK PÚBLICO
+// API DE RECEPCIÓN DE OUTLOOK
+// POST /api/webhook/capturas
 // ========================================
 
 app.use('/api/webhook', webhookRoutes);
@@ -99,19 +98,16 @@ app.use('/', authRoutes);
 // MÓDULOS CON SESIÓN INDEPENDIENTE
 // ========================================
 
-// ADMINISTRADOR
 app.use(
     '/sesion/:sessionToken/admin/tickets',
     adminRoutes
 );
 
-// TÉCNICO
 app.use(
     '/sesion/:sessionToken/tecnico/tickets',
     tecnicoRoutes
 );
 
-// USUARIO
 app.use(
     '/sesion/:sessionToken/usuario/tickets',
     usuarioRoutes
@@ -153,10 +149,12 @@ app.use((err, req, res, next) => {
         return next(err);
     }
 
-    const status = Number(err.status || err.statusCode) || 500;
+    const status =
+        Number(err.status || err.statusCode) || 500;
 
     if (status === 413) {
         return res.status(413).json({
+            ok: false,
             error: 'La solicitud supera el límite permitido de 4 MB.'
         });
     }
