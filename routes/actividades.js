@@ -1,4 +1,3 @@
-
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -84,8 +83,10 @@ function renderData(req, extra = {}) {
     paginationUrl: (page) => paginationUrl(req, page),
 
     categoriaLabel: (key) => {
+      const categoriaPrincipal = obtenerCategoriaPrincipal(key);
+
       const categoria = CATEGORIAS_RESUMEN.find(
-        item => item.key === key
+        item => item.key === categoriaPrincipal
       );
 
       return categoria?.label || 'Por clasificar';
@@ -140,7 +141,7 @@ const ESTADOS_OPERATIVOS = [
 ];
 
 // ========================================
-// CATÁLOGO DE CATEGORÍAS
+// CATÁLOGO PRINCIPAL DE CATEGORÍAS
 // ========================================
 
 const CATEGORIAS_RESUMEN = [
@@ -153,20 +154,8 @@ const CATEGORIAS_RESUMEN = [
     label: 'Códigos y catálogo'
   },
   {
-    key: 'clases_reclasificacion',
-    label: 'Clases y reclasificaciones'
-  },
-  {
-    key: 'movimientos_especiales',
-    label: 'Movimientos especiales'
-  },
-  {
-    key: 'ean_upc',
-    label: 'EAN, UPC y códigos de proveedor'
-  },
-  {
-    key: 'marcas_descripciones',
-    label: 'Marcas y descripciones'
+    key: 'claves_marcas',
+    label: 'Claves y marcas'
   },
   {
     key: 'tallas_surtido',
@@ -177,22 +166,8 @@ const CATEGORIAS_RESUMEN = [
     label: 'Descuentos y promociones'
   },
   {
-    key: 'proveedores',
-    label: 'Proveedores'
-  },
-  {
-    key: 'temporadas_modelos',
-    label: 'Temporadas y modelos'
-  },
-  {
-    key: 'condiciones_comerciales',
-    label: 'Condiciones comerciales'
-  },
-
-  // Compatibilidad con categorías históricas.
-  {
-    key: 'claves_marcas',
-    label: 'Claves y marcas'
+    key: 'movimientos_especiales',
+    label: 'Movimientos especiales'
   },
   {
     key: 'patrones_dc',
@@ -203,6 +178,108 @@ const CATEGORIAS_RESUMEN = [
     label: 'Por clasificar'
   }
 ];
+
+// ========================================
+// EQUIVALENCIAS DE CATEGORÍAS HISTÓRICAS
+//
+// IMPORTANTE:
+// No modifica catalog_category en Supabase.
+// Únicamente agrupa las categorías para
+// mostrar y filtrar la información.
+// ========================================
+
+const EQUIVALENCIAS_CATEGORIAS = {
+  precios_costos: [
+    'precios_costos'
+  ],
+
+  codigos_catalogo: [
+    'codigos_catalogo',
+    'ean_upc'
+  ],
+
+  claves_marcas: [
+    'claves_marcas',
+    'clases_reclasificacion',
+    'marcas_descripciones'
+  ],
+
+  tallas_surtido: [
+    'tallas_surtido'
+  ],
+
+  descuentos_promociones: [
+    'descuentos_promociones'
+  ],
+
+  movimientos_especiales: [
+    'movimientos_especiales'
+  ],
+
+  patrones_dc: [
+    'patrones_dc'
+  ],
+
+  por_clasificar: [
+    'por_clasificar',
+    'proveedores',
+    'temporadas_modelos',
+    'condiciones_comerciales'
+  ]
+};
+
+// ========================================
+// CATEGORÍAS HISTÓRICAS RECONOCIDAS
+// ========================================
+
+const TODAS_LAS_CATEGORIAS_RECONOCIDAS = [
+  ...new Set(
+    Object.values(EQUIVALENCIAS_CATEGORIAS).flat()
+  )
+];
+
+// Categorías que ya tienen una clasificación
+// principal distinta de "Por clasificar".
+
+const CATEGORIAS_CLASIFICADAS = [
+  ...new Set(
+    Object.entries(EQUIVALENCIAS_CATEGORIAS)
+      .filter(([categoriaPrincipal]) => {
+        return categoriaPrincipal !== 'por_clasificar';
+      })
+      .flatMap(([, equivalencias]) => equivalencias)
+  )
+];
+
+// ========================================
+// OBTENER CATEGORÍA PRINCIPAL
+// ========================================
+
+function obtenerCategoriaPrincipal(categoriaOriginal) {
+  const categoria = String(
+    categoriaOriginal || 'por_clasificar'
+  ).trim().toLowerCase();
+
+  for (const [principal, equivalencias] of Object.entries(
+    EQUIVALENCIAS_CATEGORIAS
+  )) {
+    if (equivalencias.includes(categoria)) {
+      return principal;
+    }
+  }
+
+  // Las categorías desconocidas se contabilizan
+  // visualmente como "Por clasificar".
+  return 'por_clasificar';
+}
+
+// ========================================
+// OBTENER EQUIVALENCIAS DE UNA CATEGORÍA
+// ========================================
+
+function obtenerEquivalenciasCategoria(categoriaPrincipal) {
+  return EQUIVALENCIAS_CATEGORIAS[categoriaPrincipal] || [];
+}
 
 // ========================================
 // CATÁLOGO DE ETIQUETAS OPERATIVAS
@@ -283,7 +360,10 @@ function crearResumenVacio() {
 
 // ========================================
 // OBTENER RESUMEN COMPLETO
-// Lee todos los registros en bloques de 1000
+//
+// Lee todos los registros en bloques de 1000.
+// Las categorías históricas se consolidan
+// únicamente durante el cálculo del resumen.
 // ========================================
 
 async function obtenerResumenActividades(supabase) {
@@ -341,9 +421,12 @@ async function obtenerResumenActividades(supabase) {
         actividad.status || ''
       ).trim().toLowerCase();
 
-      const categoria = String(
+      const categoriaOriginal = String(
         actividad.catalog_category || 'por_clasificar'
       ).trim().toLowerCase();
+
+      const categoriaPrincipal =
+        obtenerCategoriaPrincipal(categoriaOriginal);
 
       const cantidad = Number(
         actividad.quantity
@@ -353,12 +436,11 @@ async function obtenerResumenActividades(supabase) {
       resumen.totalModelos += cantidad;
 
       // ------------------------------------
-      // CONTAR CATEGORÍAS
+      // CONTAR CATEGORÍAS CONSOLIDADAS
       // ------------------------------------
 
       const categoriaResumen =
-        categoriasPorClave.get(categoria) ||
-        categoriasPorClave.get('por_clasificar');
+        categoriasPorClave.get(categoriaPrincipal);
 
       if (categoriaResumen) {
         categoriaResumen.actividades += 1;
@@ -480,6 +562,66 @@ function obtenerFiltros(req) {
 }
 
 // ========================================
+// APLICAR FILTRO DE CATEGORÍA
+//
+// Las categorías principales consultan
+// también sus equivalencias históricas.
+//
+// "Por clasificar" incluye:
+// - por_clasificar
+// - proveedores
+// - temporadas_modelos
+// - condiciones_comerciales
+// - categorías desconocidas
+// - valores NULL
+//
+// No modifica los registros de Supabase.
+// ========================================
+
+function aplicarFiltroCategoria(consulta, categoriaFiltro) {
+  if (!categoriaFiltro) {
+    return consulta;
+  }
+
+  // ------------------------------------
+  // FILTRO POR CLASIFICAR
+  // ------------------------------------
+
+  if (categoriaFiltro === 'por_clasificar') {
+    const listaExcluidas = CATEGORIAS_CLASIFICADAS.join(',');
+
+    // Incluye:
+    // 1. catalog_category NULL.
+    // 2. Categorías que no pertenecen a las
+    //    categorías principales clasificadas.
+    //
+    // Así también entran los valores históricos
+    // pendientes y las categorías desconocidas.
+
+    return consulta.or(
+      `catalog_category.is.null,catalog_category.not.in.(${listaExcluidas})`
+    );
+  }
+
+  // ------------------------------------
+  // FILTRO POR LAS DEMÁS CATEGORÍAS
+  // ------------------------------------
+
+  const equivalencias = obtenerEquivalenciasCategoria(
+    categoriaFiltro
+  );
+
+  if (!equivalencias.length) {
+    return consulta;
+  }
+
+  return consulta.in(
+    'catalog_category',
+    equivalencias
+  );
+}
+
+// ========================================
 // DASHBOARD DE ACTIVIDADES
 // PAGINACIÓN: 10 REGISTROS POR PÁGINA
 // ========================================
@@ -531,15 +673,13 @@ router.get('/', async (req, res) => {
       });
 
     // ------------------------------------
-    // FILTRO POR CATEGORÍA
+    // FILTRO POR CATEGORÍA CONSOLIDADA
     // ------------------------------------
 
-    if (categoriaFiltro) {
-      consulta = consulta.eq(
-        'catalog_category',
-        categoriaFiltro
-      );
-    }
+    consulta = aplicarFiltroCategoria(
+      consulta,
+      categoriaFiltro
+    );
 
     // ------------------------------------
     // FILTRO POR ETIQUETA OPERATIVA
@@ -659,7 +799,7 @@ router.get('/', async (req, res) => {
       );
 
       console.log(
-        'Resumen por categoría:',
+        'Resumen por categoría consolidada:',
         resumenActividades.categorias.map(item => ({
           categoria: item.key,
           actividades: item.actividades,
@@ -725,7 +865,7 @@ router.get('/', async (req, res) => {
 
     console.log(
       'Filtro categoría:',
-      categoriaFiltro || 'Todos'
+      categoriaFiltro || 'Todas'
     );
 
     console.log(
@@ -1664,12 +1804,10 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
 
 router.post('/:id/tomar', async (req, res) => {
   try {
-    // Obtener y limpiar el nombre enviado desde el formulario.
     const responsibleName = String(
       req.body?.responsible_name || ''
     ).trim();
 
-    // Validar que se haya escrito un nombre.
     if (!responsibleName) {
       return res.redirect(
         303,
@@ -1677,7 +1815,6 @@ router.post('/:id/tomar', async (req, res) => {
       );
     }
 
-    // Validar la longitud máxima.
     if (responsibleName.length > 120) {
       return res.redirect(
         303,
@@ -1685,8 +1822,6 @@ router.post('/:id/tomar', async (req, res) => {
       );
     }
 
-    // Enviar el ID de la actividad y el nombre capturado.
-    // La función SQL obtiene el ID real del usuario con auth.uid().
     const { error } = await req.supabase.rpc(
       'tomar_actividad',
       {
