@@ -76,7 +76,7 @@
         },
 
         // ========================================
-        // CONFIRMACIONES PERSONALIZADAS
+        // CONFIRMACIONES
         // ========================================
 
         confirmar({
@@ -125,7 +125,7 @@
 
         tomar: {
             titulo: '¿Tomar actividad?',
-            mensaje: 'La actividad quedará asignada a tu usuario.',
+            mensaje: 'La actividad quedará asignada al responsable indicado.',
             confirmar: 'Sí, tomar',
             icono: 'question',
             color: '#2563eb'
@@ -148,11 +148,27 @@
         },
 
         eliminar: {
-            titulo: '¿Eliminar registro?',
-            mensaje: 'Esta operación puede ser irreversible.',
-            confirmar: 'Sí, eliminar',
-            icono: 'error',
+            titulo: '¿Cancelar actividad?',
+            mensaje: 'La actividad cambiará al estado cancelada. Se conservará su historial.',
+            confirmar: 'Sí, cancelar',
+            icono: 'warning',
             color: '#dc2626'
+        },
+
+        desvalidar: {
+            titulo: '¿Desvalidar actividad?',
+            mensaje: 'La actividad regresará al estado disponible.',
+            confirmar: 'Sí, desvalidar',
+            icono: 'warning',
+            color: '#d97706'
+        },
+
+        reactivar: {
+            titulo: '¿Reactivar actividad?',
+            mensaje: 'La actividad volverá a estar operativa.',
+            confirmar: 'Sí, reactivar',
+            icono: 'question',
+            color: '#2563eb'
         }
     };
 
@@ -171,12 +187,23 @@
                 .split('/')
                 .filter(Boolean);
 
-            const ultimaParte = segmentos.at(-1);
+            const ultimaParte = segmentos[
+                segmentos.length - 1
+            ];
 
-            return acciones[ultimaParte] ? ultimaParte : null;
+            return Object.prototype.hasOwnProperty.call(
+                acciones,
+                ultimaParte
+            )
+                ? ultimaParte
+                : null;
 
         } catch (error) {
-            console.error('Error identificando acción:', error);
+            console.error(
+                'Error identificando acción:',
+                error
+            );
+
             return null;
         }
     }
@@ -186,7 +213,6 @@
     // ========================================
 
     document.addEventListener('submit', async function (evento) {
-
         const formulario = evento.target;
 
         if (!(formulario instanceof HTMLFormElement)) {
@@ -201,31 +227,53 @@
 
         evento.preventDefault();
 
-        // Evitar dobles envíos
+        // Evitar envíos duplicados.
         if (formulario.dataset.enviando === 'true') {
             return;
         }
 
         const configuracion = acciones[accion];
 
-        const resultado = await BodesaAlert.confirmar({
-            titulo: configuracion.titulo,
-            mensaje: configuracion.mensaje,
-            textoConfirmar: configuracion.confirmar,
-            icono: configuracion.icono,
-            colorConfirmar: configuracion.color
-        });
+        try {
+            const resultado = await BodesaAlert.confirmar({
+                titulo: configuracion.titulo,
+                mensaje: configuracion.mensaje,
+                textoConfirmar: configuracion.confirmar,
+                icono: configuracion.icono,
+                colorConfirmar: configuracion.color
+            });
 
-        if (!resultado.isConfirmed) {
-            return;
+            if (!resultado.isConfirmed) {
+                return;
+            }
+
+            formulario.dataset.enviando = 'true';
+
+            const botones = formulario.querySelectorAll(
+                'button[type="submit"], button:not([type])'
+            );
+
+            botones.forEach(boton => {
+                boton.disabled = true;
+            });
+
+            // Enviar el formulario original sin modificar
+            // sus campos, método HTTP ni destino.
+            HTMLFormElement.prototype.submit.call(formulario);
+
+        } catch (error) {
+            formulario.dataset.enviando = 'false';
+
+            console.error(
+                'ERROR EN CONFIRMACIÓN:',
+                error
+            );
+
+            BodesaAlert.error(
+                'No se pudo procesar la confirmación.'
+            );
         }
 
-        formulario.dataset.enviando = 'true';
-
-        // Enviar el formulario original sin alterar su método,
-        // destino, campos ni parámetros.
-        HTMLFormElement.prototype.submit.call(formulario);
-
-    });
+    }, true);
 
 })();

@@ -150,7 +150,6 @@ block content
                         form(
                             method='POST'
                             action=dashboardUrl + '/' + activity.id + '/eliminar'
-                            onsubmit="return confirm('¿Estás seguro de cancelar esta actividad?');"
                         )
                             .form-group
                                 label(for='cancellation_reason') Motivo de cancelación
@@ -182,7 +181,6 @@ block content
                         form(
                             method='POST'
                             action=dashboardUrl + '/' + activity.id + '/desvalidar'
-                            onsubmit="return confirm('¿Deseas desvalidar esta actividad?');"
                         )
                             .form-group
                                 label(for='desvalidation_reason') Motivo de desvalidación
@@ -210,7 +208,6 @@ block content
                         form(
                             method='POST'
                             action=dashboardUrl + '/' + activity.id + '/reactivar'
-                            onsubmit="return confirm('¿Deseas reactivar esta actividad?');"
                         )
                             .form-group
                                 label(for='reactivation_mode') Modalidad de reactivación
