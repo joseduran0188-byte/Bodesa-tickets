@@ -2,8 +2,16 @@
 (function () {
     'use strict';
 
+    // Evitar instalar dos veces el mismo controlador.
+    if (window.__bodesaSweetAlertInstalado) {
+        return;
+    }
+
+    window.__bodesaSweetAlertInstalado = true;
+
     if (typeof Swal === 'undefined') {
         console.error('SweetAlert2 no está disponible.');
+        window.__bodesaSweetAlertInstalado = false;
         return;
     }
 
@@ -213,6 +221,7 @@
     // ========================================
 
     document.addEventListener('submit', async function (evento) {
+
         const formulario = evento.target;
 
         if (!(formulario instanceof HTMLFormElement)) {
@@ -225,16 +234,25 @@
             return;
         }
 
+        // Detener cualquier otro listener de submit
+        // que intente abrir otra confirmación.
         evento.preventDefault();
+        evento.stopImmediatePropagation();
 
-        // Evitar envíos duplicados.
-        if (formulario.dataset.enviando === 'true') {
+        // Evitar procesar dos veces el mismo formulario.
+        if (
+            formulario.dataset.confirmacionActiva === 'true' ||
+            formulario.dataset.enviando === 'true'
+        ) {
             return;
         }
+
+        formulario.dataset.confirmacionActiva = 'true';
 
         const configuracion = acciones[accion];
 
         try {
+
             const resultado = await BodesaAlert.confirmar({
                 titulo: configuracion.titulo,
                 mensaje: configuracion.mensaje,
@@ -257,21 +275,25 @@
                 boton.disabled = true;
             });
 
-            // Enviar el formulario original sin modificar
-            // sus campos, método HTTP ni destino.
+            // Enviar el formulario original.
             HTMLFormElement.prototype.submit.call(formulario);
 
         } catch (error) {
-            formulario.dataset.enviando = 'false';
 
             console.error(
                 'ERROR EN CONFIRMACIÓN:',
                 error
             );
 
+            formulario.dataset.enviando = 'false';
+
             BodesaAlert.error(
                 'No se pudo procesar la confirmación.'
             );
+
+        } finally {
+
+            formulario.dataset.confirmacionActiva = 'false';
         }
 
     }, true);
