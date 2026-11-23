@@ -41,15 +41,18 @@ block content
                                 td= (act.current_responsible && act.current_responsible.full_name) || 'Sin asignar'
 
                                 td.actions
+                                    //- VER
                                     a.action-btn.action-view(
                                         href=dashboardUrl + '/' + act.id
                                     ) Ver
 
+                                    //- EDITAR
                                     if user.role === 'admin' && act.status !== 'cancelada'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id + '#administracion'
                                         ) Editar
 
+                                    //- TOMAR
                                     if act.status === 'disponible' || act.status === 'devuelta'
                                         form(
                                             method='POST'
@@ -58,6 +61,7 @@ block content
                                         )
                                             button.action-btn(type='submit') Tomar
 
+                                    //- TERMINAR Y LIBERAR
                                     if act.status === 'en_proceso' && (act.current_responsible_id === user.id || user.role === 'admin')
                                         form(
                                             method='POST'
@@ -75,6 +79,7 @@ block content
                                         )
                                             button.action-btn(type='submit') Liberar
 
+                                    //- VALIDAR Y DEVOLVER
                                     if act.status === 'pendiente_validacion' && user.role === 'admin'
                                         form(
                                             method='POST'
@@ -90,17 +95,21 @@ block content
                                         )
                                             button.action-btn(type='submit') Devolver
 
+                                    //- DESVALIDAR
                                     if act.status === 'validada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
                                         ) Desvalidar
 
+                                    //- REACTIVAR
                                     if act.status === 'cancelada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
                                         ) Reactivar
 
-            //- Información de registros
+            //- ========================================
+            //- INFORMACIÓN DE REGISTROS
+            //- ========================================
             .pagination-container
                 .pagination-info
                     p
@@ -112,7 +121,15 @@ block content
                         strong= totalActividades
                         |  actividades
 
-                //- Navegación entre páginas
+                    p.pagination-page-info
+                        | Página 
+                        strong= paginaActual
+                        |  de 
+                        strong= totalPaginas
+
+                //- ========================================
+                //- CONTROLES DE PAGINACIÓN
+                //- ========================================
                 if totalPaginas > 1
                     nav.pagination(aria-label='Paginación de actividades')
                         if tienePaginaAnterior
@@ -123,13 +140,31 @@ block content
                         else
                             span.pagination-btn.disabled Anterior
 
+                        if paginas[0] > 1
+                            a.pagination-number(
+                                href=dashboardUrl + '?page=1'
+                            ) 1
+
+                            if paginas[0] > 2
+                                span.pagination-ellipsis ...
+
                         each numero in paginas
                             if numero === paginaActual
-                                span.pagination-number.active(aria-current='page')= numero
+                                span.pagination-number.active(
+                                    aria-current='page'
+                                )= numero
                             else
                                 a.pagination-number(
                                     href=dashboardUrl + '?page=' + numero
                                 )= numero
+
+                        if paginas[paginas.length - 1] < totalPaginas
+                            if paginas[paginas.length - 1] < totalPaginas - 1
+                                span.pagination-ellipsis ...
+
+                            a.pagination-number(
+                                href=dashboardUrl + '?page=' + totalPaginas
+                            )= totalPaginas
 
                         if tienePaginaSiguiente
                             a.pagination-btn(

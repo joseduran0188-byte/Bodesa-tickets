@@ -110,7 +110,6 @@ router.get('/', async (req, res) => {
   try {
     const REGISTROS_POR_PAGINA = 10;
 
-    // Validar el parámetro page.
     const pageParam = String(req.query.page || '1');
 
     const paginaSolicitada = /^\d+$/.test(pageParam)
@@ -122,8 +121,6 @@ router.get('/', async (req, res) => {
     const desde = (paginaInicial - 1) * REGISTROS_POR_PAGINA;
     const hasta = desde + REGISTROS_POR_PAGINA - 1;
 
-    // Consultar solamente los registros de la página solicitada.
-    // count: exact permite conocer el total de actividades.
     const {
       data: activities,
       count,
@@ -149,10 +146,7 @@ router.get('/', async (req, res) => {
       .range(desde, hasta);
 
     if (error) {
-      console.error(
-        'ERROR DASHBOARD ACTIVIDADES:',
-        error
-      );
+      console.error('ERROR DASHBOARD ACTIVIDADES:', error);
 
       return res.status(500).send(
         'Error al cargar actividades'
@@ -166,8 +160,6 @@ router.get('/', async (req, res) => {
       Math.ceil(totalActividades / REGISTROS_POR_PAGINA)
     );
 
-    // Si se solicita una página que ya no existe,
-    // regresar a la última página válida.
     if (
       paginaInicial > totalPaginas &&
       totalActividades > 0
@@ -183,7 +175,6 @@ router.get('/', async (req, res) => {
       totalPaginas
     );
 
-    // Generar una ventana de hasta cinco páginas.
     const inicioVentana = Math.max(
       1,
       Math.min(
@@ -223,30 +214,22 @@ router.get('/', async (req, res) => {
       renderData(req, {
         title: 'Capturas / Actividades',
         activities: registrosActuales,
-
         paginaActual,
         totalPaginas,
         totalActividades,
         registrosPorPagina: REGISTROS_POR_PAGINA,
-
         desdeRegistro,
         hastaRegistro,
-
         paginas,
-
         tienePaginaAnterior: paginaActual > 1,
         tienePaginaSiguiente: paginaActual < totalPaginas,
-
         paginaAnterior: paginaActual - 1,
         paginaSiguiente: paginaActual + 1
       })
     );
 
   } catch (err) {
-    console.error(
-      'ERROR DASHBOARD:',
-      err
-    );
+    console.error('ERROR DASHBOARD:', err);
 
     return res.status(500).send(
       'Error interno'
@@ -272,7 +255,6 @@ router.get('/metricas', async (req, res) => {
 
     if (error) {
       console.error('ERROR MÉTRICAS:', error);
-
       return res.status(500).send(
         'No se pudieron cargar las métricas'
       );
@@ -284,7 +266,6 @@ router.get('/metricas', async (req, res) => {
         acc.terminadas += Number(m.terminadas) || 0;
         acc.validadas += Number(m.validadas) || 0;
         acc.liberadas += Number(m.liberadas) || 0;
-
         return acc;
       },
       {
@@ -307,10 +288,7 @@ router.get('/metricas', async (req, res) => {
 
   } catch (err) {
     console.error('ERROR INTERNO MÉTRICAS:', err);
-
-    return res.status(500).send(
-      'Error interno'
-    );
+    return res.status(500).send('Error interno');
   }
 });
 
@@ -332,7 +310,6 @@ router.get('/mi-trabajo', async (req, res) => {
 
     if (error) {
       console.error('ERROR MI TRABAJO:', error);
-
       return res.status(500).send(
         'No se pudieron cargar tus actividades'
       );
@@ -348,10 +325,7 @@ router.get('/mi-trabajo', async (req, res) => {
 
   } catch (err) {
     console.error('ERROR INTERNO MI TRABAJO:', err);
-
-    return res.status(500).send(
-      'Error interno'
-    );
+    return res.status(500).send('Error interno');
   }
 });
 
@@ -368,7 +342,6 @@ router.get('/tablero', async (req, res) => {
       )
     `;
 
-    // 1. ACTIVIDADES OPERATIVAS
     const {
       data: activas,
       error: errorActivas
@@ -383,13 +356,11 @@ router.get('/tablero', async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDADES OPERATIVAS:',
         errorActivas
       );
-
       return res.status(500).send(
         'No se pudieron consultar las actividades operativas'
       );
     }
 
-    // 2. ÚLTIMAS 15 ACTIVIDADES VALIDADAS
     const {
       data: validadas,
       error: errorValidadas
@@ -409,20 +380,17 @@ router.get('/tablero', async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDADES VALIDADAS:',
         errorValidadas
       );
-
       return res.status(500).send(
         'No se pudieron consultar las actividades validadas'
       );
     }
 
-    // 3. CREAR COLUMNAS
     const columnas = {};
 
     ESTADOS_TABLERO.forEach((estado) => {
       columnas[estado] = [];
     });
 
-    // 4. CLASIFICAR ACTIVIDADES OPERATIVAS
     const estadosEncontrados = {};
 
     (activas || []).forEach((actividad) => {
@@ -438,10 +406,8 @@ router.get('/tablero', async (req, res) => {
       }
     });
 
-    // 5. AGREGAR VALIDADAS
     columnas.validada = validadas || [];
 
-    // 6. ORDENAR POR PRIORIDAD Y FECHA
     Object.keys(columnas).forEach((estado) => {
       columnas[estado].sort((a, b) => {
         const prioridadA =
@@ -461,7 +427,6 @@ router.get('/tablero', async (req, res) => {
       });
     });
 
-    // 7. DIAGNÓSTICO
     console.log('========== DIAGNÓSTICO KANBAN ==========');
     console.log('Actividades operativas:', (activas || []).length);
     console.log('Estados encontrados:', estadosEncontrados);
@@ -475,7 +440,6 @@ router.get('/tablero', async (req, res) => {
     console.log('Validadas mostradas:', columnas.validada.length);
     console.log('========================================');
 
-    // 8. RENDERIZAR
     return res.render(
       'actividades/tablero',
       renderData(req, {
@@ -485,11 +449,7 @@ router.get('/tablero', async (req, res) => {
     );
 
   } catch (err) {
-    console.error(
-      'ERROR INTERNO TABLERO:',
-      err
-    );
-
+    console.error('ERROR INTERNO TABLERO:', err);
     return res.status(500).send(
       'Error interno al cargar el tablero'
     );
@@ -523,7 +483,6 @@ router.get('/:id', async (req, res) => {
 
     if (error) {
       console.error('ERROR AL CARGAR DETALLE:', error);
-
       return res.status(500).send(
         'Error al cargar la actividad'
       );
@@ -551,10 +510,7 @@ router.get('/:id', async (req, res) => {
 
   } catch (err) {
     console.error('ERROR DETALLE:', err);
-
-    return res.status(500).send(
-      'Error'
-    );
+    return res.status(500).send('Error');
   }
 });
 
@@ -579,7 +535,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA EDITAR:',
         readError
       );
-
       return res.status(500).send(
         'No se pudo consultar la actividad'
       );
@@ -680,7 +635,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR ACTUALIZANDO ACTIVIDAD:',
         updateError
       );
-
       return res.status(500).send(
         'No se pudieron guardar los cambios'
       );
@@ -705,7 +659,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR REGISTRANDO EDICIÓN EN HISTORIAL:',
         historyError
       );
-
       return res.status(500).send(
         'Los cambios se guardaron, pero no se pudo registrar la modificación en el historial. Contacta al administrador del sistema.'
       );
@@ -718,7 +671,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 
   } catch (err) {
     console.error('ERROR EDITAR ACTIVIDAD:', err);
-
     return res.status(500).send(
       'Error interno al editar actividad'
     );
@@ -756,7 +708,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA CANCELAR:',
         readError
       );
-
       return res.status(500).send(
         'No se pudo consultar la actividad'
       );
@@ -791,7 +742,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         'ERROR CANCELANDO ACTIVIDAD:',
         updateError
       );
-
       return res.status(500).send(
         'No se pudo cancelar la actividad'
       );
@@ -817,7 +767,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         'ERROR REGISTRANDO CANCELACIÓN:',
         historyError
       );
-
       return res.status(500).send(
         'La actividad fue cancelada, pero no se pudo registrar la acción en el historial. Contacta al administrador del sistema.'
       );
@@ -830,7 +779,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
 
   } catch (err) {
     console.error('ERROR CANCELAR ACTIVIDAD:', err);
-
     return res.status(500).send(
       'Error interno al cancelar la actividad'
     );
@@ -839,7 +787,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
 
 // ========================================
 // DESVALIDAR ACTIVIDAD (SOLO ADMIN)
-// validada -> disponible
 // ========================================
 router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
   try {
@@ -860,14 +807,7 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) {
-      console.error(
-        'ERROR DESVALIDAR ACTIVIDAD:',
-        error
-      );
-
-      throw error;
-    }
+    if (error) throw error;
 
     return res.redirect(
       303,
@@ -876,7 +816,6 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
 
   } catch (err) {
     console.error('ERROR DESVALIDAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo desvalidar la actividad'
     );
@@ -913,14 +852,7 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) {
-      console.error(
-        'ERROR RPC REACTIVAR ACTIVIDAD:',
-        error
-      );
-
-      throw error;
-    }
+    if (error) throw error;
 
     return res.redirect(
       303,
@@ -929,7 +861,6 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
 
   } catch (err) {
     console.error('ERROR REACTIVAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo reactivar la actividad'
     );
@@ -952,11 +883,7 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error(
-        'ERROR AL BUSCAR ADJUNTO:',
-        error
-      );
-
+      console.error('ERROR AL BUSCAR ADJUNTO:', error);
       return res.status(500).send(
         'Error al consultar el archivo'
       );
@@ -988,7 +915,6 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
         'ERROR AL GENERAR URL FIRMADA:',
         signError
       );
-
       return res.status(500).send(
         'No se pudo generar el enlace de descarga'
       );
@@ -999,17 +925,10 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
       'no-store, private'
     );
 
-    return res.redirect(
-      302,
-      signed.signedUrl
-    );
+    return res.redirect(302, signed.signedUrl);
 
   } catch (err) {
-    console.error(
-      'ERROR AL DESCARGAR ADJUNTO:',
-      err
-    );
-
+    console.error('ERROR AL DESCARGAR ADJUNTO:', err);
     return res.status(500).send(
       'Error al descargar el archivo'
     );
@@ -1030,14 +949,10 @@ router.post('/:id/tomar', async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
+    return res.redirect(303, baseUrl(req));
 
   } catch (err) {
     console.error('ERROR TOMAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo tomar la actividad'
     );
@@ -1058,14 +973,10 @@ router.post('/:id/terminar', async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
+    return res.redirect(303, baseUrl(req));
 
   } catch (err) {
     console.error('ERROR TERMINAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo terminar la actividad'
     );
@@ -1086,14 +997,10 @@ router.post('/:id/validar', requireAdmin, async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
+    return res.redirect(303, baseUrl(req));
 
   } catch (err) {
     console.error('ERROR VALIDAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo validar la actividad'
     );
@@ -1119,14 +1026,10 @@ router.post('/:id/liberar', async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
+    return res.redirect(303, baseUrl(req));
 
   } catch (err) {
     console.error('ERROR LIBERAR ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo liberar'
     );
@@ -1152,14 +1055,10 @@ router.post('/:id/devolver', requireAdmin, async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
+    return res.redirect(303, baseUrl(req));
 
   } catch (err) {
     console.error('ERROR DEVOLVER ACTIVIDAD:', err);
-
     return res.status(400).send(
       err.message || 'No se pudo devolver'
     );
