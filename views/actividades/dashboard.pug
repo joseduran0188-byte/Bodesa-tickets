@@ -17,12 +17,12 @@ mixin paginacion
                 .pagination-controls(style='display:flex; flex-wrap:wrap; align-items:center; gap:6px;')
                     if tienePaginaAnterior
                         a.action-btn.action-view(
-                            href=dashboardUrl + '?page=1'
+                            href=paginationUrl(1)
                             style='text-decoration:none;'
                         ) « Primera
 
                         a.action-btn.action-view(
-                            href=dashboardUrl + '?page=' + paginaAnterior
+                            href=paginationUrl(paginaAnterior)
                             style='text-decoration:none;'
                         ) ‹ Anterior
                     else
@@ -36,18 +36,18 @@ mixin paginacion
                             )= numeroPagina
                         else
                             a.action-btn.action-view(
-                                href=dashboardUrl + '?page=' + numeroPagina
+                                href=paginationUrl(numeroPagina)
                                 style='text-decoration:none;'
                             )= numeroPagina
 
                     if tienePaginaSiguiente
                         a.action-btn.action-view(
-                            href=dashboardUrl + '?page=' + paginaSiguiente
+                            href=paginationUrl(paginaSiguiente)
                             style='text-decoration:none;'
                         ) Siguiente ›
 
                         a.action-btn.action-view(
-                            href=dashboardUrl + '?page=' + totalPaginas
+                            href=paginationUrl(totalPaginas)
                             style='text-decoration:none;'
                         ) Última »
                     else
@@ -61,7 +61,7 @@ block content
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
 
-        // DIAGNÓSTICO DE PLANTILLA
+        // DIAGNOSTICO
         .debug-dashboard(
             style='background:#fff3cd; color:#664d03; padding:15px; margin:15px 0; border:2px solid #ffca2c; border-radius:8px;'
         )
@@ -69,7 +69,7 @@ block content
 
             p
                 strong Versión:
-                |  DASHBOARD RESUMEN Y PAGINACIÓN
+                |  DASHBOARD CATEGORÍAS Y ETIQUETAS
 
             p
                 strong Rol:
@@ -96,14 +96,14 @@ block content
             .activity-summary(style='margin:25px 0;')
                 h2(style='margin-bottom:15px;') Resumen general
 
-                // TARJETAS PRINCIPALES
                 .summary-cards(
                     style='display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:25px;'
                 )
                     .summary-card(
                         style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px;'
                     )
-                        p(style='margin:0; color:#666; font-size:13px;') Total de actividades
+                        p(style='margin:0; color:#666; font-size:13px;')
+                            | Total de actividades
 
                         h2(style='margin:8px 0 0; font-size:28px;')
                             = resumenActividades.totalActividades.toLocaleString('es-MX')
@@ -111,13 +111,15 @@ block content
                     .summary-card(
                         style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px;'
                     )
-                        p(style='margin:0; color:#666; font-size:13px;') Total de modelos
+                        p(style='margin:0; color:#666; font-size:13px;')
+                            | Total de modelos
 
                         h2(style='margin:8px 0 0; font-size:28px;')
                             = resumenActividades.totalModelos.toLocaleString('es-MX')
 
                 // RESUMEN POR ESTADO
-                h2(style='margin:25px 0 15px;') Actividades por estado
+                h2(style='margin:25px 0 15px;')
+                    | Actividades por estado
 
                 .status-summary(
                     style='display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px;'
@@ -132,8 +134,9 @@ block content
                             h2(style='margin:8px 0 0; font-size:26px;')
                                 = estado.total.toLocaleString('es-MX')
 
-                // RESUMEN POR DEPÓSITO
-                h2(style='margin:25px 0 15px;') Actividades por depósito
+                // RESUMEN POR CATEGORIA
+                h2(style='margin:25px 0 15px;')
+                    | Actividades por categoría
 
                 .category-summary(
                     style='display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;'
@@ -153,6 +156,80 @@ block content
                                 strong= categoria.modelos.toLocaleString('es-MX')
                                 |  modelos
 
+                // RESUMEN DE ETIQUETAS
+                h2(style='margin:25px 0 15px;')
+                    | Actividades por etiqueta operativa
+
+                .tag-summary(
+                    style='display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px;'
+                )
+                    each etiqueta in resumenActividades.etiquetas
+                        .summary-card(
+                            style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px;'
+                        )
+                            p(style='margin:0; color:#666; font-size:13px;')
+                                = etiqueta.label
+
+                            h2(style='margin:8px 0 0; font-size:26px;')
+                                = etiqueta.actividades.toLocaleString('es-MX')
+
+                            p(style='margin:5px 0 0; color:#777; font-size:12px;')
+                                | actividades
+
+        // FILTROS
+        .activity-filters(
+            style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px; margin:25px 0;'
+        )
+            h2(style='margin-top:0; font-size:19px;')
+                | Buscar actividades
+
+            form(
+                method='GET'
+                action=dashboardUrl
+                style='display:flex; flex-wrap:wrap; align-items:end; gap:12px;'
+            )
+                .filter-field(style='flex:1; min-width:220px;')
+                    label(for='category-filter')
+                        strong Categoría
+
+                    select#category-filter(
+                        name='category'
+                        style='width:100%; padding:10px; border:1px solid #ccc; border-radius:6px;'
+                    )
+                        option(value='') Todas las categorías
+
+                        each categoria in categoriasFiltro
+                            option(
+                                value=categoria.key
+                                selected=(categoriaFiltro === categoria.key)
+                            )= categoria.label
+
+                .filter-field(style='flex:1; min-width:180px;')
+                    label(for='tag-filter')
+                        strong Etiqueta operativa
+
+                    select#tag-filter(
+                        name='tag'
+                        style='width:100%; padding:10px; border:1px solid #ccc; border-radius:6px;'
+                    )
+                        option(value='') Todas las etiquetas
+
+                        each etiqueta in etiquetasFiltro
+                            option(
+                                value=etiqueta.key
+                                selected=(etiquetaFiltro === etiqueta.key)
+                            )= etiqueta.label
+
+                button.action-btn(
+                    type='submit'
+                    style='padding:10px 18px;'
+                ) Filtrar
+
+                a.action-btn.action-view(
+                    href=dashboardUrl
+                    style='text-decoration:none; padding:10px 18px;'
+                ) Limpiar filtros
+
         // TABLA DE ACTIVIDADES
         if activities && activities.length
             +paginacion
@@ -163,6 +240,8 @@ block content
                         tr
                             th Título
                             th Remitente
+                            th Categoría
+                            th Etiquetas
                             th Tipo
                             th Cant.
                             th Prioridad
@@ -176,6 +255,20 @@ block content
                                 td.ticket-title= act.title
 
                                 td= act.requester_name || '—'
+
+                                td
+                                    span.badge
+                                        = categoriaLabel(act.catalog_category)
+
+                                td
+                                    if Array.isArray(act.operational_tags) && act.operational_tags.length
+                                        div(style='display:flex; flex-wrap:wrap; gap:4px;')
+                                            each tag in act.operational_tags
+                                                span(
+                                                    style='display:inline-block; padding:4px 8px; border-radius:12px; background:#e0e7ff; color:#3730a3; font-size:12px; font-weight:600;'
+                                                )= tag
+                                    else
+                                        | —
 
                                 td= act.activity_type || '—'
 
@@ -256,4 +349,10 @@ block content
         else
             .empty-state
                 h3 No hay actividades
-                p Las capturas aparecerán aquí cuando se registren.
+
+                if categoriaFiltro || etiquetaFiltro
+                    p No se encontraron actividades con los filtros seleccionados.
+                    a.action-btn.action-view(href=dashboardUrl)
+                        | Limpiar filtros
+                else
+                    p Las capturas aparecerán aquí cuando se registren.

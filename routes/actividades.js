@@ -15,6 +15,7 @@ router.use(requireAuth, requireStaff);
 // ========================================
 // CLIENTE ADMINISTRATIVO DE SUPABASE
 // ========================================
+
 let supabaseAdmin = null;
 
 function getSupabaseAdmin() {
@@ -24,25 +25,51 @@ function getSupabaseAdmin() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error(
+      'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY'
+    );
   }
 
-  supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false
+  supabaseAdmin = createClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
     }
-  });
+  );
 
   return supabaseAdmin;
 }
 
 // ========================================
-// UTILIDADES
+// CONFIGURACIÓN GENERAL
 // ========================================
+
 function baseUrl(req) {
   return `/sesion/${encodeURIComponent(req.params.sessionToken)}/actividades`;
+}
+
+function paginationUrl(req, page) {
+  const params = new URLSearchParams();
+
+  const category = String(req.query.category || '').trim();
+  const tag = String(req.query.tag || '').trim();
+
+  if (category) {
+    params.set('category', category);
+  }
+
+  if (tag) {
+    params.set('tag', tag);
+  }
+
+  params.set('page', String(page));
+
+  return `${baseUrl(req)}?${params.toString()}`;
 }
 
 function renderData(req, extra = {}) {
@@ -50,7 +77,20 @@ function renderData(req, extra = {}) {
     user: req.user,
     sessionToken: req.params.sessionToken,
     dashboardUrl: baseUrl(req),
-    logoutUrl: `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
+
+    logoutUrl:
+      `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
+
+    paginationUrl: (page) => paginationUrl(req, page),
+
+    categoriaLabel: (key) => {
+      const categoria = CATEGORIAS_RESUMEN.find(
+        item => item.key === key
+      );
+
+      return categoria?.label || 'Por clasificar';
+    },
+
     formatDate: (date) => {
       if (!date) return '—';
 
@@ -60,6 +100,7 @@ function renderData(req, extra = {}) {
         timeStyle: 'short'
       });
     },
+
     ...extra
   };
 }
@@ -69,7 +110,12 @@ function textoOpcional(value) {
   return texto || null;
 }
 
-const PRIORIDADES_VALIDAS = ['baja', 'media', 'alta', 'urgente'];
+const PRIORIDADES_VALIDAS = [
+  'baja',
+  'media',
+  'alta',
+  'urgente'
+];
 
 const ORDEN_PRIORIDADES = {
   urgente: 4,
@@ -94,40 +140,143 @@ const ESTADOS_OPERATIVOS = [
 ];
 
 // ========================================
-// CONFIGURACIÓN DEL RESUMEN
+// CATÁLOGO DE CATEGORÍAS
 // ========================================
+
 const CATEGORIAS_RESUMEN = [
-  { key: 'precios_costos', label: 'Precios y costos' },
-  { key: 'codigos_catalogo', label: 'Códigos y catálogo' },
-  { key: 'claves_marcas', label: 'Claves y marcas' },
-  { key: 'tallas_surtido', label: 'Tallas y surtido' },
-  { key: 'descuentos_promociones', label: 'Descuentos y promociones' },
-  { key: 'movimientos_especiales', label: 'Movimientos especiales' },
-  { key: 'patrones_dc', label: 'Patrones DC' },
-  { key: 'por_clasificar', label: 'Por clasificar' }
+  {
+    key: 'precios_costos',
+    label: 'Precios y costos'
+  },
+  {
+    key: 'codigos_catalogo',
+    label: 'Códigos y catálogo'
+  },
+  {
+    key: 'clases_reclasificacion',
+    label: 'Clases y reclasificaciones'
+  },
+  {
+    key: 'movimientos_especiales',
+    label: 'Movimientos especiales'
+  },
+  {
+    key: 'ean_upc',
+    label: 'EAN, UPC y códigos de proveedor'
+  },
+  {
+    key: 'marcas_descripciones',
+    label: 'Marcas y descripciones'
+  },
+  {
+    key: 'tallas_surtido',
+    label: 'Tallas y surtido'
+  },
+  {
+    key: 'descuentos_promociones',
+    label: 'Descuentos y promociones'
+  },
+  {
+    key: 'proveedores',
+    label: 'Proveedores'
+  },
+  {
+    key: 'temporadas_modelos',
+    label: 'Temporadas y modelos'
+  },
+  {
+    key: 'condiciones_comerciales',
+    label: 'Condiciones comerciales'
+  },
+
+  // Compatibilidad con categorías históricas.
+  {
+    key: 'claves_marcas',
+    label: 'Claves y marcas'
+  },
+  {
+    key: 'patrones_dc',
+    label: 'Patrones DC'
+  },
+  {
+    key: 'por_clasificar',
+    label: 'Por clasificar'
+  }
 ];
 
-const ESTADOS_RESUMEN = [
-  { key: 'disponible', label: 'Disponibles' },
-  { key: 'en_proceso', label: 'En proceso' },
-  { key: 'pendiente_validacion', label: 'Pendientes de validación' },
-  { key: 'devuelta', label: 'Devueltas' },
-  { key: 'validada', label: 'Validadas' },
-  { key: 'cancelada', label: 'Canceladas' }
+// ========================================
+// CATÁLOGO DE ETIQUETAS OPERATIVAS
+// ========================================
+
+const ETIQUETAS_RESUMEN = [
+  {
+    key: 'OL04',
+    label: 'OL04'
+  },
+  {
+    key: 'DDD',
+    label: 'DDD'
+  },
+  {
+    key: 'PVC',
+    label: 'PVC'
+  }
 ];
+
+// ========================================
+// ESTADOS
+// ========================================
+
+const ESTADOS_RESUMEN = [
+  {
+    key: 'disponible',
+    label: 'Disponibles'
+  },
+  {
+    key: 'en_proceso',
+    label: 'En proceso'
+  },
+  {
+    key: 'pendiente_validacion',
+    label: 'Pendientes de validación'
+  },
+  {
+    key: 'devuelta',
+    label: 'Devueltas'
+  },
+  {
+    key: 'validada',
+    label: 'Validadas'
+  },
+  {
+    key: 'cancelada',
+    label: 'Canceladas'
+  }
+];
+
+// ========================================
+// CREAR RESUMEN VACÍO
+// ========================================
 
 function crearResumenVacio() {
   return {
     totalActividades: 0,
     totalModelos: 0,
-    categorias: CATEGORIAS_RESUMEN.map((categoria) => ({
+
+    categorias: CATEGORIAS_RESUMEN.map(categoria => ({
       ...categoria,
       actividades: 0,
       modelos: 0
     })),
-    estados: ESTADOS_RESUMEN.map((estado) => ({
+
+    estados: ESTADOS_RESUMEN.map(estado => ({
       ...estado,
       total: 0
+    })),
+
+    etiquetas: ETIQUETAS_RESUMEN.map(etiqueta => ({
+      ...etiqueta,
+      actividades: 0
     }))
   };
 }
@@ -136,15 +285,29 @@ function crearResumenVacio() {
 // OBTENER RESUMEN COMPLETO
 // Lee todos los registros en bloques de 1000
 // ========================================
+
 async function obtenerResumenActividades(supabase) {
   const resumen = crearResumenVacio();
 
   const categoriasPorClave = new Map(
-    resumen.categorias.map((item) => [item.key, item])
+    resumen.categorias.map(item => [
+      item.key,
+      item
+    ])
   );
 
   const estadosPorClave = new Map(
-    resumen.estados.map((item) => [item.key, item])
+    resumen.estados.map(item => [
+      item.key,
+      item
+    ])
+  );
+
+  const etiquetasPorClave = new Map(
+    resumen.etiquetas.map(item => [
+      item.key,
+      item
+    ])
   );
 
   const TAMANO_BLOQUE = 1000;
@@ -155,30 +318,43 @@ async function obtenerResumenActividades(supabase) {
     error
   } = await supabase
     .from('activities')
-    .select('id, status, catalog_category, quantity', {
-      count: 'exact'
+    .select(
+      'id, status, catalog_category, quantity, operational_tags',
+      {
+        count: 'exact'
+      }
+    )
+    .order('id', {
+      ascending: true
     })
-    .order('id', { ascending: true })
     .range(0, TAMANO_BLOQUE - 1);
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 
   const totalRegistros = count || 0;
 
   function procesarBloque(registros) {
     for (const actividad of registros || []) {
-      const estado = String(actividad.status || '')
-        .trim()
-        .toLowerCase();
+      const estado = String(
+        actividad.status || ''
+      ).trim().toLowerCase();
 
       const categoria = String(
         actividad.catalog_category || 'por_clasificar'
       ).trim().toLowerCase();
 
-      const cantidad = Number(actividad.quantity) || 0;
+      const cantidad = Number(
+        actividad.quantity
+      ) || 0;
 
       resumen.totalActividades += 1;
       resumen.totalModelos += cantidad;
+
+      // ------------------------------------
+      // CONTAR CATEGORÍAS
+      // ------------------------------------
 
       const categoriaResumen =
         categoriasPorClave.get(categoria) ||
@@ -189,10 +365,39 @@ async function obtenerResumenActividades(supabase) {
         categoriaResumen.modelos += cantidad;
       }
 
+      // ------------------------------------
+      // CONTAR ESTADOS
+      // ------------------------------------
+
       const estadoResumen = estadosPorClave.get(estado);
 
       if (estadoResumen) {
         estadoResumen.total += 1;
+      }
+
+      // ------------------------------------
+      // CONTAR ETIQUETAS OPERATIVAS
+      // ------------------------------------
+
+      const etiquetas = Array.isArray(
+        actividad.operational_tags
+      )
+        ? actividad.operational_tags
+        : [];
+
+      const etiquetasUnicas = new Set(
+        etiquetas.map(etiqueta =>
+          String(etiqueta).trim().toUpperCase()
+        )
+      );
+
+      for (const etiqueta of etiquetasUnicas) {
+        const etiquetaResumen =
+          etiquetasPorClave.get(etiqueta);
+
+        if (etiquetaResumen) {
+          etiquetaResumen.actividades += 1;
+        }
       }
     }
   }
@@ -214,19 +419,24 @@ async function obtenerResumenActividades(supabase) {
       error: errorBloque
     } = await supabase
       .from('activities')
-      .select('id, status, catalog_category, quantity')
-      .order('id', { ascending: true })
+      .select(
+        'id, status, catalog_category, quantity, operational_tags'
+      )
+      .order('id', {
+        ascending: true
+      })
       .range(desde, hasta);
 
-    if (errorBloque) throw errorBloque;
+    if (errorBloque) {
+      throw errorBloque;
+    }
 
     procesarBloque(data);
   }
 
-  // Comprobación del total leído frente al total de Supabase.
   if (resumen.totalActividades !== totalRegistros) {
     console.warn(
-      'ADVERTENCIA: el total leído no coincide con el total reportado por Supabase.',
+      'ADVERTENCIA: el total leído no coincide con Supabase.',
       {
         totalSupabase: totalRegistros,
         totalLeido: resumen.totalActividades
@@ -238,29 +448,77 @@ async function obtenerResumenActividades(supabase) {
 }
 
 // ========================================
+// VALIDAR FILTROS DEL DASHBOARD
+// ========================================
+
+function obtenerFiltros(req) {
+  const categoriaSolicitada = String(
+    req.query.category || ''
+  ).trim();
+
+  const etiquetaSolicitada = String(
+    req.query.tag || ''
+  ).trim().toUpperCase();
+
+  const categoriaValida = CATEGORIAS_RESUMEN.some(
+    item => item.key === categoriaSolicitada
+  );
+
+  const etiquetaValida = ETIQUETAS_RESUMEN.some(
+    item => item.key === etiquetaSolicitada
+  );
+
+  return {
+    categoriaFiltro: categoriaValida
+      ? categoriaSolicitada
+      : '',
+
+    etiquetaFiltro: etiquetaValida
+      ? etiquetaSolicitada
+      : ''
+  };
+}
+
+// ========================================
 // DASHBOARD DE ACTIVIDADES
 // PAGINACIÓN: 10 REGISTROS POR PÁGINA
 // ========================================
+
 router.get('/', async (req, res) => {
   try {
     const REGISTROS_POR_PAGINA = 10;
 
-    const pageParam = String(req.query.page || '1');
+    const {
+      categoriaFiltro,
+      etiquetaFiltro
+    } = obtenerFiltros(req);
+
+    const pageParam = String(
+      req.query.page || '1'
+    );
 
     const paginaSolicitada = /^\d+$/.test(pageParam)
       ? Number(pageParam)
       : 1;
 
-    const paginaInicial = Math.max(1, paginaSolicitada);
+    const paginaInicial = Math.max(
+      1,
+      paginaSolicitada
+    );
 
-    const desde = (paginaInicial - 1) * REGISTROS_POR_PAGINA;
-    const hasta = desde + REGISTROS_POR_PAGINA - 1;
+    const desde = (
+      paginaInicial - 1
+    ) * REGISTROS_POR_PAGINA;
 
-    const {
-      data: activities,
-      count,
-      error
-    } = await req.supabase
+    const hasta = (
+      desde + REGISTROS_POR_PAGINA - 1
+    );
+
+    // ------------------------------------
+    // CONSULTA PRINCIPAL
+    // ------------------------------------
+
+    let consulta = req.supabase
       .from('activities')
       .select(`
         *,
@@ -270,7 +528,40 @@ router.get('/', async (req, res) => {
         )
       `, {
         count: 'exact'
-      })
+      });
+
+    // ------------------------------------
+    // FILTRO POR CATEGORÍA
+    // ------------------------------------
+
+    if (categoriaFiltro) {
+      consulta = consulta.eq(
+        'catalog_category',
+        categoriaFiltro
+      );
+    }
+
+    // ------------------------------------
+    // FILTRO POR ETIQUETA OPERATIVA
+    // operational_tags es JSONB
+    // ------------------------------------
+
+    if (etiquetaFiltro) {
+      consulta = consulta.contains(
+        'operational_tags',
+        [etiquetaFiltro]
+      );
+    }
+
+    // ------------------------------------
+    // ORDEN Y PAGINACIÓN
+    // ------------------------------------
+
+    const {
+      data: activities,
+      count,
+      error
+    } = await consulta
       .order('received_at', {
         ascending: false,
         nullsFirst: false
@@ -281,33 +572,52 @@ router.get('/', async (req, res) => {
       .range(desde, hasta);
 
     if (error) {
-      console.error('ERROR DASHBOARD ACTIVIDADES:', error);
-      return res.status(500).send('Error al cargar actividades');
+      console.error(
+        'ERROR DASHBOARD ACTIVIDADES:',
+        error
+      );
+
+      return res.status(500).send(
+        'Error al cargar actividades'
+      );
     }
 
     const totalActividades = count || 0;
 
     const totalPaginas = Math.max(
       1,
-      Math.ceil(totalActividades / REGISTROS_POR_PAGINA)
+      Math.ceil(
+        totalActividades / REGISTROS_POR_PAGINA
+      )
     );
 
-    if (paginaInicial > totalPaginas && totalActividades > 0) {
+    if (
+      paginaInicial > totalPaginas &&
+      totalActividades > 0
+    ) {
       return res.redirect(
         302,
-        `${baseUrl(req)}?page=${totalPaginas}`
+        paginationUrl(req, totalPaginas)
       );
     }
 
-    const paginaActual = Math.min(paginaInicial, totalPaginas);
+    const paginaActual = Math.min(
+      paginaInicial,
+      totalPaginas
+    );
 
     const inicioVentana = Math.max(
       1,
-      Math.min(paginaActual - 2, totalPaginas - 4)
+      Math.min(
+        paginaActual - 2,
+        totalPaginas - 4
+      )
     );
 
     const paginas = Array.from(
-      { length: Math.min(5, totalPaginas) },
+      {
+        length: Math.min(5, totalPaginas)
+      },
       (_, i) => inicioVentana + i
     );
 
@@ -322,7 +632,10 @@ router.get('/', async (req, res) => {
       totalActividades
     );
 
-    // Obtener estadísticas de todas las actividades.
+    // ------------------------------------
+    // RESUMEN GENERAL
+    // ------------------------------------
+
     let resumenActividades = crearResumenVacio();
 
     try {
@@ -330,22 +643,42 @@ router.get('/', async (req, res) => {
         req.supabase
       );
 
-      console.log('========== RESUMEN ACTIVIDADES ==========');
-      console.log('Total actividades:', resumenActividades.totalActividades);
-      console.log('Total modelos:', resumenActividades.totalModelos);
       console.log(
-        'Resumen por depósito:',
-        resumenActividades.categorias.map((item) => ({
-          deposito: item.key,
+        '========== RESUMEN ACTIVIDADES =========='
+      );
+
+      console.log(
+        'Total actividades:',
+        resumenActividades.totalActividades
+      );
+
+      console.log(
+        'Total modelos:',
+        resumenActividades.totalModelos
+      );
+
+      console.log(
+        'Resumen por categoría:',
+        resumenActividades.categorias.map(item => ({
+          categoria: item.key,
           actividades: item.actividades,
           modelos: item.modelos
         }))
       );
+
+      console.log(
+        'Resumen por etiqueta:',
+        resumenActividades.etiquetas
+      );
+
       console.log(
         'Resumen por estado:',
         resumenActividades.estados
       );
-      console.log('=========================================');
+
+      console.log(
+        '========================================='
+      );
 
     } catch (errorResumen) {
       console.error(
@@ -354,58 +687,139 @@ router.get('/', async (req, res) => {
       );
     }
 
-    console.log('========== PAGINACIÓN ACTIVIDADES ==========');
-    console.log('Página actual:', paginaActual);
-    console.log('Total actividades:', totalActividades);
-    console.log('Total páginas:', totalPaginas);
-    console.log('Registros obtenidos:', registrosActuales.length);
-    console.log('Rango:', desdeRegistro, '-', hastaRegistro);
-    console.log('============================================');
+    // ------------------------------------
+    // DIAGNÓSTICO DE PAGINACIÓN
+    // ------------------------------------
+
+    console.log(
+      '========== PAGINACIÓN ACTIVIDADES =========='
+    );
+
+    console.log(
+      'Página actual:',
+      paginaActual
+    );
+
+    console.log(
+      'Total actividades:',
+      totalActividades
+    );
+
+    console.log(
+      'Total páginas:',
+      totalPaginas
+    );
+
+    console.log(
+      'Registros obtenidos:',
+      registrosActuales.length
+    );
+
+    console.log(
+      'Rango:',
+      desdeRegistro,
+      '-',
+      hastaRegistro
+    );
+
+    console.log(
+      'Filtro categoría:',
+      categoriaFiltro || 'Todos'
+    );
+
+    console.log(
+      'Filtro etiqueta:',
+      etiquetaFiltro || 'Todas'
+    );
+
+    console.log(
+      '============================================'
+    );
+
+    // ------------------------------------
+    // RENDERIZAR DASHBOARD
+    // ------------------------------------
 
     return res.render(
       'actividades/dashboard',
       renderData(req, {
         title: 'Capturas / Actividades',
+
         activities: registrosActuales,
+
         resumenActividades,
+
         paginaActual,
         totalPaginas,
         totalActividades,
+
         registrosPorPagina: REGISTROS_POR_PAGINA,
+
         desdeRegistro,
         hastaRegistro,
+
         paginas,
+
         tienePaginaAnterior: paginaActual > 1,
         tienePaginaSiguiente: paginaActual < totalPaginas,
+
         paginaAnterior: paginaActual - 1,
-        paginaSiguiente: paginaActual + 1
+        paginaSiguiente: paginaActual + 1,
+
+        categoriaFiltro,
+        etiquetaFiltro,
+
+        categoriasFiltro: CATEGORIAS_RESUMEN,
+        etiquetasFiltro: ETIQUETAS_RESUMEN
       })
     );
 
   } catch (err) {
-    console.error('ERROR DASHBOARD:', err);
-    return res.status(500).send('Error interno');
+    console.error(
+      'ERROR DASHBOARD:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error interno'
+    );
   }
 });
 
 // ========================================
 // MÉTRICAS DE PRODUCTIVIDAD
 // ========================================
+
 router.get('/metricas', async (req, res) => {
   try {
-    const diasSolicitados = Number.parseInt(req.query.dias, 10);
+    const diasSolicitados = Number.parseInt(
+      req.query.dias,
+      10
+    );
 
     const dias = Number.isInteger(diasSolicitados)
-      ? Math.min(Math.max(diasSolicitados, 1), 365)
+      ? Math.min(
+          Math.max(diasSolicitados, 1),
+          365
+        )
       : 30;
 
-    const { data: metricas, error } = await req.supabase
-      .rpc('metricas_productividad', {
+    const {
+      data: metricas,
+      error
+    } = await req.supabase.rpc(
+      'metricas_productividad',
+      {
         p_dias: dias
-      });
+      }
+    );
 
     if (error) {
-      console.error('ERROR MÉTRICAS:', error);
+      console.error(
+        'ERROR MÉTRICAS:',
+        error
+      );
+
       return res.status(500).send(
         'No se pudieron cargar las métricas'
       );
@@ -417,6 +831,7 @@ router.get('/metricas', async (req, res) => {
         acc.terminadas += Number(m.terminadas) || 0;
         acc.validadas += Number(m.validadas) || 0;
         acc.liberadas += Number(m.liberadas) || 0;
+
         return acc;
       },
       {
@@ -438,29 +853,48 @@ router.get('/metricas', async (req, res) => {
     );
 
   } catch (err) {
-    console.error('ERROR INTERNO MÉTRICAS:', err);
-    return res.status(500).send('Error interno');
+    console.error(
+      'ERROR INTERNO MÉTRICAS:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error interno'
+    );
   }
 });
 
 // ========================================
 // MI TRABAJO
 // ========================================
+
 router.get('/mi-trabajo', async (req, res) => {
   try {
-    const { data: misActividades, error } = await req.supabase
+    const {
+      data: misActividades,
+      error
+    } = await req.supabase
       .from('activities')
       .select('*')
-      .eq('current_responsible_id', req.user.id)
+      .eq(
+        'current_responsible_id',
+        req.user.id
+      )
       .in('status', [
         'en_proceso',
         'pendiente_validacion',
         'devuelta'
       ])
-      .order('started_at', { ascending: false });
+      .order('started_at', {
+        ascending: false
+      });
 
     if (error) {
-      console.error('ERROR MI TRABAJO:', error);
+      console.error(
+        'ERROR MI TRABAJO:',
+        error
+      );
+
       return res.status(500).send(
         'No se pudieron cargar tus actividades'
       );
@@ -475,14 +909,21 @@ router.get('/mi-trabajo', async (req, res) => {
     );
 
   } catch (err) {
-    console.error('ERROR INTERNO MI TRABAJO:', err);
-    return res.status(500).send('Error interno');
+    console.error(
+      'ERROR INTERNO MI TRABAJO:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error interno'
+    );
   }
 });
 
 // ========================================
 // TABLERO KANBAN
 // ========================================
+
 router.get('/tablero', async (req, res) => {
   try {
     const selectActividades = `
@@ -500,13 +941,16 @@ router.get('/tablero', async (req, res) => {
       .from('activities')
       .select(selectActividades)
       .in('status', ESTADOS_OPERATIVOS)
-      .order('created_at', { ascending: false });
+      .order('created_at', {
+        ascending: false
+      });
 
     if (errorActivas) {
       console.error(
         'ERROR CONSULTANDO ACTIVIDADES OPERATIVAS:',
         errorActivas
       );
+
       return res.status(500).send(
         'No se pudieron consultar las actividades operativas'
       );
@@ -523,7 +967,9 @@ router.get('/tablero', async (req, res) => {
         ascending: false,
         nullsFirst: false
       })
-      .order('created_at', { ascending: false })
+      .order('created_at', {
+        ascending: false
+      })
       .limit(15);
 
     if (errorValidadas) {
@@ -531,6 +977,7 @@ router.get('/tablero', async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDADES VALIDADAS:',
         errorValidadas
       );
+
       return res.status(500).send(
         'No se pudieron consultar las actividades validadas'
       );
@@ -538,16 +985,16 @@ router.get('/tablero', async (req, res) => {
 
     const columnas = {};
 
-    ESTADOS_TABLERO.forEach((estado) => {
+    ESTADOS_TABLERO.forEach(estado => {
       columnas[estado] = [];
     });
 
     const estadosEncontrados = {};
 
-    (activas || []).forEach((actividad) => {
-      const estado = String(actividad.status || '')
-        .trim()
-        .toLowerCase();
+    (activas || []).forEach(actividad => {
+      const estado = String(
+        actividad.status || ''
+      ).trim().toLowerCase();
 
       estadosEncontrados[estado] =
         (estadosEncontrados[estado] || 0) + 1;
@@ -559,10 +1006,13 @@ router.get('/tablero', async (req, res) => {
 
     columnas.validada = validadas || [];
 
-    Object.keys(columnas).forEach((estado) => {
+    Object.keys(columnas).forEach(estado => {
       columnas[estado].sort((a, b) => {
-        const prioridadA = ORDEN_PRIORIDADES[a.priority] || 0;
-        const prioridadB = ORDEN_PRIORIDADES[b.priority] || 0;
+        const prioridadA =
+          ORDEN_PRIORIDADES[a.priority] || 0;
+
+        const prioridadB =
+          ORDEN_PRIORIDADES[b.priority] || 0;
 
         if (prioridadA !== prioridadB) {
           return prioridadB - prioridadA;
@@ -575,18 +1025,48 @@ router.get('/tablero', async (req, res) => {
       });
     });
 
-    console.log('========== DIAGNÓSTICO KANBAN ==========');
-    console.log('Actividades operativas:', (activas || []).length);
-    console.log('Estados encontrados:', estadosEncontrados);
-    console.log('Disponibles:', columnas.disponible.length);
-    console.log('En proceso:', columnas.en_proceso.length);
+    console.log(
+      '========== DIAGNÓSTICO KANBAN =========='
+    );
+
+    console.log(
+      'Actividades operativas:',
+      (activas || []).length
+    );
+
+    console.log(
+      'Estados encontrados:',
+      estadosEncontrados
+    );
+
+    console.log(
+      'Disponibles:',
+      columnas.disponible.length
+    );
+
+    console.log(
+      'En proceso:',
+      columnas.en_proceso.length
+    );
+
     console.log(
       'Pendientes de validación:',
       columnas.pendiente_validacion.length
     );
-    console.log('Devueltas:', columnas.devuelta.length);
-    console.log('Validadas mostradas:', columnas.validada.length);
-    console.log('========================================');
+
+    console.log(
+      'Devueltas:',
+      columnas.devuelta.length
+    );
+
+    console.log(
+      'Validadas mostradas:',
+      columnas.validada.length
+    );
+
+    console.log(
+      '========================================'
+    );
 
     return res.render(
       'actividades/tablero',
@@ -597,7 +1077,11 @@ router.get('/tablero', async (req, res) => {
     );
 
   } catch (err) {
-    console.error('ERROR INTERNO TABLERO:', err);
+    console.error(
+      'ERROR INTERNO TABLERO:',
+      err
+    );
+
     return res.status(500).send(
       'Error interno al cargar el tablero'
     );
@@ -607,9 +1091,13 @@ router.get('/tablero', async (req, res) => {
 // ========================================
 // DETALLE DE ACTIVIDAD
 // ========================================
+
 router.get('/:id', async (req, res) => {
   try {
-    const { data: activity, error } = await req.supabase
+    const {
+      data: activity,
+      error
+    } = await req.supabase
       .from('activities')
       .select(`
         *,
@@ -630,15 +1118,25 @@ router.get('/:id', async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error('ERROR AL CARGAR DETALLE:', error);
-      return res.status(500).send('Error al cargar la actividad');
+      console.error(
+        'ERROR AL CARGAR DETALLE:',
+        error
+      );
+
+      return res.status(500).send(
+        'Error al cargar la actividad'
+      );
     }
 
     if (!activity) {
-      return res.status(404).send('Actividad no encontrada');
+      return res.status(404).send(
+        'Actividad no encontrada'
+      );
     }
 
-    activity.history = (activity.history || []).sort(
+    activity.history = (
+      activity.history || []
+    ).sort(
       (a, b) =>
         new Date(b.created_at).getTime() -
         new Date(a.created_at).getTime()
@@ -653,14 +1151,21 @@ router.get('/:id', async (req, res) => {
     );
 
   } catch (err) {
-    console.error('ERROR DETALLE:', err);
-    return res.status(500).send('Error');
+    console.error(
+      'ERROR DETALLE:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error'
+    );
   }
 });
 
 // ========================================
 // EDITAR ACTIVIDAD (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/editar', requireAdmin, async (req, res) => {
   try {
     const activityId = req.params.id;
@@ -679,11 +1184,16 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA EDITAR:',
         readError
       );
-      return res.status(500).send('No se pudo consultar la actividad');
+
+      return res.status(500).send(
+        'No se pudo consultar la actividad'
+      );
     }
 
     if (!anterior) {
-      return res.status(404).send('Actividad no encontrada');
+      return res.status(404).send(
+        'Actividad no encontrada'
+      );
     }
 
     if (anterior.status === 'cancelada') {
@@ -692,7 +1202,9 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       );
     }
 
-    const title = String(req.body?.title || '').trim();
+    const title = String(
+      req.body?.title || ''
+    ).trim();
 
     if (!title) {
       return res.status(400).send(
@@ -705,7 +1217,9 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     ).toLowerCase();
 
     if (!PRIORIDADES_VALIDAS.includes(priority)) {
-      return res.status(400).send('Prioridad no válida');
+      return res.status(400).send(
+        'Prioridad no válida'
+      );
     }
 
     let quantity = null;
@@ -716,7 +1230,10 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     ) {
       quantity = Number(req.body.quantity);
 
-      if (!Number.isInteger(quantity) || quantity < 0) {
+      if (
+        !Number.isInteger(quantity) ||
+        quantity < 0
+      ) {
         return res.status(400).send(
           'La cantidad debe ser un entero mayor o igual a cero'
         );
@@ -725,11 +1242,17 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 
     const cambios = {
       title,
-      requester_name: textoOpcional(req.body?.requester_name),
-      activity_type: textoOpcional(req.body?.activity_type),
+      requester_name: textoOpcional(
+        req.body?.requester_name
+      ),
+      activity_type: textoOpcional(
+        req.body?.activity_type
+      ),
       quantity,
       priority,
-      observations: textoOpcional(req.body?.observations),
+      observations: textoOpcional(
+        req.body?.observations
+      ),
       updated_at: new Date().toISOString()
     };
 
@@ -744,7 +1267,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 
     const modificaciones = {};
 
-    camposAuditables.forEach((campo) => {
+    camposAuditables.forEach(campo => {
       const valorAnterior = anterior[campo] ?? null;
       const valorNuevo = cambios[campo] ?? null;
 
@@ -757,22 +1280,33 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     });
 
     if (Object.keys(modificaciones).length === 0) {
-      return res.redirect(303, `${baseUrl(req)}/${activityId}`);
+      return res.redirect(
+        303,
+        `${baseUrl(req)}/${activityId}`
+      );
     }
 
-    const { error: updateError } = await req.supabase
+    const {
+      error: updateError
+    } = await req.supabase
       .from('activities')
       .update(cambios)
       .eq('id', activityId);
 
     if (updateError) {
-      console.error('ERROR ACTUALIZANDO ACTIVIDAD:', updateError);
+      console.error(
+        'ERROR ACTUALIZANDO ACTIVIDAD:',
+        updateError
+      );
+
       return res.status(500).send(
         'No se pudieron guardar los cambios'
       );
     }
 
-    const { error: historyError } = await req.supabase
+    const {
+      error: historyError
+    } = await req.supabase
       .from('activity_history')
       .insert({
         activity_id: activityId,
@@ -791,15 +1325,23 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR REGISTRANDO EDICIÓN EN HISTORIAL:',
         historyError
       );
+
       return res.status(500).send(
         'Los cambios se guardaron, pero no se pudo registrar la modificación en el historial. Contacta al administrador del sistema.'
       );
     }
 
-    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
 
   } catch (err) {
-    console.error('ERROR EDITAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR EDITAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(500).send(
       'Error interno al editar actividad'
     );
@@ -809,6 +1351,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 // ========================================
 // CANCELAR ACTIVIDAD (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/eliminar', requireAdmin, async (req, res) => {
   try {
     const activityId = req.params.id;
@@ -837,11 +1380,16 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA CANCELAR:',
         readError
       );
-      return res.status(500).send('No se pudo consultar la actividad');
+
+      return res.status(500).send(
+        'No se pudo consultar la actividad'
+      );
     }
 
     if (!anterior) {
-      return res.status(404).send('Actividad no encontrada');
+      return res.status(404).send(
+        'Actividad no encontrada'
+      );
     }
 
     if (anterior.status === 'cancelada') {
@@ -852,7 +1400,9 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
 
     const ahora = new Date().toISOString();
 
-    const { error: updateError } = await req.supabase
+    const {
+      error: updateError
+    } = await req.supabase
       .from('activities')
       .update({
         status: 'cancelada',
@@ -863,11 +1413,19 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       .eq('id', activityId);
 
     if (updateError) {
-      console.error('ERROR CANCELANDO ACTIVIDAD:', updateError);
-      return res.status(500).send('No se pudo cancelar la actividad');
+      console.error(
+        'ERROR CANCELANDO ACTIVIDAD:',
+        updateError
+      );
+
+      return res.status(500).send(
+        'No se pudo cancelar la actividad'
+      );
     }
 
-    const { error: historyError } = await req.supabase
+    const {
+      error: historyError
+    } = await req.supabase
       .from('activity_history')
       .insert({
         activity_id: activityId,
@@ -883,27 +1441,44 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       });
 
     if (historyError) {
-      console.error('ERROR REGISTRANDO CANCELACIÓN:', historyError);
+      console.error(
+        'ERROR REGISTRANDO CANCELACIÓN:',
+        historyError
+      );
+
       return res.status(500).send(
         'La actividad fue cancelada, pero no se pudo registrar la acción en el historial. Contacta al administrador del sistema.'
       );
     }
 
-    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
 
   } catch (err) {
-    console.error('ERROR CANCELAR ACTIVIDAD:', err);
-    return res.status(500).send('Error interno al cancelar actividad');
+    console.error(
+      'ERROR CANCELAR ACTIVIDAD:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error interno al cancelar actividad'
+    );
   }
 });
 
 // ========================================
 // DESVALIDAR ACTIVIDAD (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
   try {
     const activityId = req.params.id;
-    const reason = String(req.body?.reason || '').trim();
+
+    const reason = String(
+      req.body?.reason || ''
+    ).trim();
 
     if (!reason) {
       return res.status(400).send(
@@ -919,12 +1494,21 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
 
   } catch (err) {
-    console.error('ERROR DESVALIDAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR DESVALIDAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo desvalidar la actividad'
     );
@@ -934,11 +1518,18 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
 // ========================================
 // REACTIVAR ACTIVIDAD CANCELADA (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/reactivar', requireAdmin, async (req, res) => {
   try {
     const activityId = req.params.id;
-    const reason = String(req.body?.reason || '').trim();
-    const mode = String(req.body?.mode || '').trim();
+
+    const reason = String(
+      req.body?.reason || ''
+    ).trim();
+
+    const mode = String(
+      req.body?.mode || ''
+    ).trim();
 
     if (!reason) {
       return res.status(400).send(
@@ -961,12 +1552,21 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
 
   } catch (err) {
-    console.error('ERROR REACTIVAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR REACTIVAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo reactivar la actividad'
     );
@@ -976,6 +1576,7 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
 // ========================================
 // DESCARGAR ADJUNTO
 // ========================================
+
 router.get('/:id/adjunto/:attachmentId', async (req, res) => {
   try {
     const {
@@ -989,12 +1590,20 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error('ERROR AL BUSCAR ADJUNTO:', error);
-      return res.status(500).send('Error al consultar el archivo');
+      console.error(
+        'ERROR AL BUSCAR ADJUNTO:',
+        error
+      );
+
+      return res.status(500).send(
+        'Error al consultar el archivo'
+      );
     }
 
     if (!att) {
-      return res.status(404).send('Archivo no encontrado');
+      return res.status(404).send(
+        'Archivo no encontrado'
+      );
     }
 
     if (!att.file_path) {
@@ -1010,28 +1619,48 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
       error: signError
     } = await admin.storage
       .from('activity-attachments')
-      .createSignedUrl(att.file_path, 60);
+      .createSignedUrl(
+        att.file_path,
+        60
+      );
 
     if (signError || !signed?.signedUrl) {
-      console.error('ERROR AL GENERAR URL FIRMADA:', signError);
+      console.error(
+        'ERROR AL GENERAR URL FIRMADA:',
+        signError
+      );
+
       return res.status(500).send(
         'No se pudo generar el enlace de descarga'
       );
     }
 
-    res.setHeader('Cache-Control', 'no-store, private');
+    res.setHeader(
+      'Cache-Control',
+      'no-store, private'
+    );
 
-    return res.redirect(302, signed.signedUrl);
+    return res.redirect(
+      302,
+      signed.signedUrl
+    );
 
   } catch (err) {
-    console.error('ERROR AL DESCARGAR ADJUNTO:', err);
-    return res.status(500).send('Error al descargar el archivo');
+    console.error(
+      'ERROR AL DESCARGAR ADJUNTO:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error al descargar el archivo'
+    );
   }
 });
 
 // ========================================
 // TOMAR ACTIVIDAD
 // ========================================
+
 router.post('/:id/tomar', async (req, res) => {
   try {
     const { error } = await req.supabase.rpc(
@@ -1041,12 +1670,21 @@ router.post('/:id/tomar', async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, baseUrl(req));
+    return res.redirect(
+      303,
+      baseUrl(req)
+    );
 
   } catch (err) {
-    console.error('ERROR TOMAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR TOMAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo tomar la actividad'
     );
@@ -1056,6 +1694,7 @@ router.post('/:id/tomar', async (req, res) => {
 // ========================================
 // MARCAR ACTIVIDAD COMO TERMINADA
 // ========================================
+
 router.post('/:id/terminar', async (req, res) => {
   try {
     const { error } = await req.supabase.rpc(
@@ -1065,12 +1704,21 @@ router.post('/:id/terminar', async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, baseUrl(req));
+    return res.redirect(
+      303,
+      baseUrl(req)
+    );
 
   } catch (err) {
-    console.error('ERROR TERMINAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR TERMINAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo terminar la actividad'
     );
@@ -1080,6 +1728,7 @@ router.post('/:id/terminar', async (req, res) => {
 // ========================================
 // VALIDAR ACTIVIDAD (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/validar', requireAdmin, async (req, res) => {
   try {
     const { error } = await req.supabase.rpc(
@@ -1089,12 +1738,21 @@ router.post('/:id/validar', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, baseUrl(req));
+    return res.redirect(
+      303,
+      baseUrl(req)
+    );
 
   } catch (err) {
-    console.error('ERROR VALIDAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR VALIDAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo validar la actividad'
     );
@@ -1104,6 +1762,7 @@ router.post('/:id/validar', requireAdmin, async (req, res) => {
 // ========================================
 // LIBERAR ACTIVIDAD
 // ========================================
+
 router.post('/:id/liberar', async (req, res) => {
   try {
     const reason = String(
@@ -1118,12 +1777,21 @@ router.post('/:id/liberar', async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, baseUrl(req));
+    return res.redirect(
+      303,
+      baseUrl(req)
+    );
 
   } catch (err) {
-    console.error('ERROR LIBERAR ACTIVIDAD:', err);
+    console.error(
+      'ERROR LIBERAR ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo liberar'
     );
@@ -1133,6 +1801,7 @@ router.post('/:id/liberar', async (req, res) => {
 // ========================================
 // DEVOLVER ACTIVIDAD (SOLO ADMIN)
 // ========================================
+
 router.post('/:id/devolver', requireAdmin, async (req, res) => {
   try {
     const reason = String(
@@ -1147,12 +1816,21 @@ router.post('/:id/devolver', requireAdmin, async (req, res) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-    return res.redirect(303, baseUrl(req));
+    return res.redirect(
+      303,
+      baseUrl(req)
+    );
 
   } catch (err) {
-    console.error('ERROR DEVOLVER ACTIVIDAD:', err);
+    console.error(
+      'ERROR DEVOLVER ACTIVIDAD:',
+      err
+    );
+
     return res.status(400).send(
       err.message || 'No se pudo devolver'
     );
