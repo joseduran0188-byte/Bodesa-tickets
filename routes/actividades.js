@@ -954,43 +954,17 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
 });
 
 // ========================================
-// TOMAR ACTIVIDAD
-// ========================================
-router.post('/:id/tomar', async (req, res) => {
-  try {
-    const { error } = await req.supabase.rpc(
-      'tomar_actividad',
-      {
-        p_activity_id: req.params.id
-      }
-    );
-
-    if (error) throw error;
-
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${req.params.id}`
-    );
-
-  } catch (err) {
-    console.error('ERROR TOMAR ACTIVIDAD:', err);
-
-    return res.status(400).send(
-      err.message || 'No se pudo tomar la actividad'
-    );
-  }
-});
-
-// ========================================
 // LIBERAR ACTIVIDAD
 // ========================================
 router.post('/:id/liberar', async (req, res) => {
   try {
+    const reason = req.body?.reason?.trim() || null;
+
     const { error } = await req.supabase.rpc(
       'liberar_actividad',
       {
         p_activity_id: req.params.id,
-        p_reason: req.body.reason || null
+        p_reason: reason
       }
     );
 
@@ -1011,71 +985,17 @@ router.post('/:id/liberar', async (req, res) => {
 });
 
 // ========================================
-// MARCAR ACTIVIDAD COMO TERMINADA
-// ========================================
-router.post('/:id/terminar', async (req, res) => {
-  try {
-    const { error } = await req.supabase.rpc(
-      'marcar_terminada',
-      {
-        p_activity_id: req.params.id
-      }
-    );
-
-    if (error) throw error;
-
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${req.params.id}`
-    );
-
-  } catch (err) {
-    console.error('ERROR TERMINAR ACTIVIDAD:', err);
-
-    return res.status(400).send(
-      err.message || 'No se pudo marcar terminada'
-    );
-  }
-});
-
-// ========================================
-// VALIDAR ACTIVIDAD (SOLO ADMIN)
-// ========================================
-router.post('/:id/validar', requireAdmin, async (req, res) => {
-  try {
-    const { error } = await req.supabase.rpc(
-      'validar_actividad',
-      {
-        p_activity_id: req.params.id
-      }
-    );
-
-    if (error) throw error;
-
-    return res.redirect(
-      303,
-      baseUrl(req)
-    );
-
-  } catch (err) {
-    console.error('ERROR VALIDAR ACTIVIDAD:', err);
-
-    return res.status(400).send(
-      err.message || 'No se pudo validar'
-    );
-  }
-});
-
-// ========================================
 // DEVOLVER ACTIVIDAD (SOLO ADMIN)
 // ========================================
 router.post('/:id/devolver', requireAdmin, async (req, res) => {
   try {
+    const reason = req.body?.reason?.trim() || 'Devuelta';
+
     const { error } = await req.supabase.rpc(
       'devolver_actividad',
       {
         p_activity_id: req.params.id,
-        p_reason: req.body.reason || 'Devuelta'
+        p_reason: reason
       }
     );
 
