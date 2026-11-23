@@ -24,9 +24,7 @@ function getSupabaseAdmin() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error(
-      'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY'
-    );
+    throw new Error('Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY');
   }
 
   supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -53,7 +51,6 @@ function renderData(req, extra = {}) {
     sessionToken: req.params.sessionToken,
     dashboardUrl: baseUrl(req),
     logoutUrl: `/sesion/${encodeURIComponent(req.params.sessionToken)}/logout`,
-
     formatDate: (date) => {
       if (!date) return '—';
 
@@ -63,7 +60,6 @@ function renderData(req, extra = {}) {
         timeStyle: 'short'
       });
     },
-
     ...extra
   };
 }
@@ -73,12 +69,7 @@ function textoOpcional(value) {
   return texto || null;
 }
 
-const PRIORIDADES_VALIDAS = [
-  'baja',
-  'media',
-  'alta',
-  'urgente'
-];
+const PRIORIDADES_VALIDAS = ['baja', 'media', 'alta', 'urgente'];
 
 const ORDEN_PRIORIDADES = {
   urgente: 4,
@@ -101,6 +92,150 @@ const ESTADOS_OPERATIVOS = [
   'pendiente_validacion',
   'devuelta'
 ];
+
+// ========================================
+// CONFIGURACIÓN DEL RESUMEN
+// ========================================
+const CATEGORIAS_RESUMEN = [
+  { key: 'precios_costos', label: 'Precios y costos' },
+  { key: 'codigos_catalogo', label: 'Códigos y catálogo' },
+  { key: 'claves_marcas', label: 'Claves y marcas' },
+  { key: 'tallas_surtido', label: 'Tallas y surtido' },
+  { key: 'descuentos_promociones', label: 'Descuentos y promociones' },
+  { key: 'movimientos_especiales', label: 'Movimientos especiales' },
+  { key: 'patrones_dc', label: 'Patrones DC' },
+  { key: 'por_clasificar', label: 'Por clasificar' }
+];
+
+const ESTADOS_RESUMEN = [
+  { key: 'disponible', label: 'Disponibles' },
+  { key: 'en_proceso', label: 'En proceso' },
+  { key: 'pendiente_validacion', label: 'Pendientes de validación' },
+  { key: 'devuelta', label: 'Devueltas' },
+  { key: 'validada', label: 'Validadas' },
+  { key: 'cancelada', label: 'Canceladas' }
+];
+
+function crearResumenVacio() {
+  return {
+    totalActividades: 0,
+    totalModelos: 0,
+    categorias: CATEGORIAS_RESUMEN.map((categoria) => ({
+      ...categoria,
+      actividades: 0,
+      modelos: 0
+    })),
+    estados: ESTADOS_RESUMEN.map((estado) => ({
+      ...estado,
+      total: 0
+    }))
+  };
+}
+
+// ========================================
+// OBTENER RESUMEN COMPLETO
+// Lee todos los registros en bloques de 1000
+// ========================================
+async function obtenerResumenActividades(supabase) {
+  const resumen = crearResumenVacio();
+
+  const categoriasPorClave = new Map(
+    resumen.categorias.map((item) => [item.key, item])
+  );
+
+  const estadosPorClave = new Map(
+    resumen.estados.map((item) => [item.key, item])
+  );
+
+  const TAMANO_BLOQUE = 1000;
+
+  const {
+    data: primerBloque,
+    count,
+    error
+  } = await supabase
+    .from('activities')
+    .select('id, status, catalog_category, quantity', {
+      count: 'exact'
+    })
+    .order('id', { ascending: true })
+    .range(0, TAMANO_BLOQUE - 1);
+
+  if (error) throw error;
+
+  const totalRegistros = count || 0;
+
+  function procesarBloque(registros) {
+    for (const actividad of registros || []) {
+      const estado = String(actividad.status || '')
+        .trim()
+        .toLowerCase();
+
+      const categoria = String(
+        actividad.catalog_category || 'por_clasificar'
+      ).trim().toLowerCase();
+
+      const cantidad = Number(actividad.quantity) || 0;
+
+      resumen.totalActividades += 1;
+      resumen.totalModelos += cantidad;
+
+      const categoriaResumen =
+        categoriasPorClave.get(categoria) ||
+        categoriasPorClave.get('por_clasificar');
+
+      if (categoriaResumen) {
+        categoriaResumen.actividades += 1;
+        categoriaResumen.modelos += cantidad;
+      }
+
+      const estadoResumen = estadosPorClave.get(estado);
+
+      if (estadoResumen) {
+        estadoResumen.total += 1;
+      }
+    }
+  }
+
+  procesarBloque(primerBloque);
+
+  for (
+    let desde = TAMANO_BLOQUE;
+    desde < totalRegistros;
+    desde += TAMANO_BLOQUE
+  ) {
+    const hasta = Math.min(
+      desde + TAMANO_BLOQUE - 1,
+      totalRegistros - 1
+    );
+
+    const {
+      data,
+      error: errorBloque
+    } = await supabase
+      .from('activities')
+      .select('id, status, catalog_category, quantity')
+      .order('id', { ascending: true })
+      .range(desde, hasta);
+
+    if (errorBloque) throw errorBloque;
+
+    procesarBloque(data);
+  }
+
+  // Comprobación del total leído frente al total de Supabase.
+  if (resumen.totalActividades !== totalRegistros) {
+    console.warn(
+      'ADVERTENCIA: el total leído no coincide con el total reportado por Supabase.',
+      {
+        totalSupabase: totalRegistros,
+        totalLeido: resumen.totalActividades
+      }
+    );
+  }
+
+  return resumen;
+}
 
 // ========================================
 // DASHBOARD DE ACTIVIDADES
@@ -147,10 +282,7 @@ router.get('/', async (req, res) => {
 
     if (error) {
       console.error('ERROR DASHBOARD ACTIVIDADES:', error);
-
-      return res.status(500).send(
-        'Error al cargar actividades'
-      );
+      return res.status(500).send('Error al cargar actividades');
     }
 
     const totalActividades = count || 0;
@@ -160,33 +292,22 @@ router.get('/', async (req, res) => {
       Math.ceil(totalActividades / REGISTROS_POR_PAGINA)
     );
 
-    if (
-      paginaInicial > totalPaginas &&
-      totalActividades > 0
-    ) {
+    if (paginaInicial > totalPaginas && totalActividades > 0) {
       return res.redirect(
         302,
         `${baseUrl(req)}?page=${totalPaginas}`
       );
     }
 
-    const paginaActual = Math.min(
-      paginaInicial,
-      totalPaginas
-    );
+    const paginaActual = Math.min(paginaInicial, totalPaginas);
 
     const inicioVentana = Math.max(
       1,
-      Math.min(
-        paginaActual - 2,
-        totalPaginas - 4
-      )
+      Math.min(paginaActual - 2, totalPaginas - 4)
     );
 
     const paginas = Array.from(
-      {
-        length: Math.min(5, totalPaginas)
-      },
+      { length: Math.min(5, totalPaginas) },
       (_, i) => inicioVentana + i
     );
 
@@ -201,6 +322,38 @@ router.get('/', async (req, res) => {
       totalActividades
     );
 
+    // Obtener estadísticas de todas las actividades.
+    let resumenActividades = crearResumenVacio();
+
+    try {
+      resumenActividades = await obtenerResumenActividades(
+        req.supabase
+      );
+
+      console.log('========== RESUMEN ACTIVIDADES ==========');
+      console.log('Total actividades:', resumenActividades.totalActividades);
+      console.log('Total modelos:', resumenActividades.totalModelos);
+      console.log(
+        'Resumen por depósito:',
+        resumenActividades.categorias.map((item) => ({
+          deposito: item.key,
+          actividades: item.actividades,
+          modelos: item.modelos
+        }))
+      );
+      console.log(
+        'Resumen por estado:',
+        resumenActividades.estados
+      );
+      console.log('=========================================');
+
+    } catch (errorResumen) {
+      console.error(
+        'ERROR AL CALCULAR RESUMEN DE ACTIVIDADES:',
+        errorResumen
+      );
+    }
+
     console.log('========== PAGINACIÓN ACTIVIDADES ==========');
     console.log('Página actual:', paginaActual);
     console.log('Total actividades:', totalActividades);
@@ -214,6 +367,7 @@ router.get('/', async (req, res) => {
       renderData(req, {
         title: 'Capturas / Actividades',
         activities: registrosActuales,
+        resumenActividades,
         paginaActual,
         totalPaginas,
         totalActividades,
@@ -230,10 +384,7 @@ router.get('/', async (req, res) => {
 
   } catch (err) {
     console.error('ERROR DASHBOARD:', err);
-
-    return res.status(500).send(
-      'Error interno'
-    );
+    return res.status(500).send('Error interno');
   }
 });
 
@@ -410,11 +561,8 @@ router.get('/tablero', async (req, res) => {
 
     Object.keys(columnas).forEach((estado) => {
       columnas[estado].sort((a, b) => {
-        const prioridadA =
-          ORDEN_PRIORIDADES[a.priority] || 0;
-
-        const prioridadB =
-          ORDEN_PRIORIDADES[b.priority] || 0;
+        const prioridadA = ORDEN_PRIORIDADES[a.priority] || 0;
+        const prioridadB = ORDEN_PRIORIDADES[b.priority] || 0;
 
         if (prioridadA !== prioridadB) {
           return prioridadB - prioridadA;
@@ -483,15 +631,11 @@ router.get('/:id', async (req, res) => {
 
     if (error) {
       console.error('ERROR AL CARGAR DETALLE:', error);
-      return res.status(500).send(
-        'Error al cargar la actividad'
-      );
+      return res.status(500).send('Error al cargar la actividad');
     }
 
     if (!activity) {
-      return res.status(404).send(
-        'Actividad no encontrada'
-      );
+      return res.status(404).send('Actividad no encontrada');
     }
 
     activity.history = (activity.history || []).sort(
@@ -535,15 +679,11 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA EDITAR:',
         readError
       );
-      return res.status(500).send(
-        'No se pudo consultar la actividad'
-      );
+      return res.status(500).send('No se pudo consultar la actividad');
     }
 
     if (!anterior) {
-      return res.status(404).send(
-        'Actividad no encontrada'
-      );
+      return res.status(404).send('Actividad no encontrada');
     }
 
     if (anterior.status === 'cancelada') {
@@ -565,9 +705,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     ).toLowerCase();
 
     if (!PRIORIDADES_VALIDAS.includes(priority)) {
-      return res.status(400).send(
-        'Prioridad no válida'
-      );
+      return res.status(400).send('Prioridad no válida');
     }
 
     let quantity = null;
@@ -619,10 +757,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     });
 
     if (Object.keys(modificaciones).length === 0) {
-      return res.redirect(
-        303,
-        `${baseUrl(req)}/${activityId}`
-      );
+      return res.redirect(303, `${baseUrl(req)}/${activityId}`);
     }
 
     const { error: updateError } = await req.supabase
@@ -631,10 +766,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       .eq('id', activityId);
 
     if (updateError) {
-      console.error(
-        'ERROR ACTUALIZANDO ACTIVIDAD:',
-        updateError
-      );
+      console.error('ERROR ACTUALIZANDO ACTIVIDAD:', updateError);
       return res.status(500).send(
         'No se pudieron guardar los cambios'
       );
@@ -664,10 +796,7 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       );
     }
 
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${activityId}`
-    );
+    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
 
   } catch (err) {
     console.error('ERROR EDITAR ACTIVIDAD:', err);
@@ -708,15 +837,11 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         'ERROR CONSULTANDO ACTIVIDAD PARA CANCELAR:',
         readError
       );
-      return res.status(500).send(
-        'No se pudo consultar la actividad'
-      );
+      return res.status(500).send('No se pudo consultar la actividad');
     }
 
     if (!anterior) {
-      return res.status(404).send(
-        'Actividad no encontrada'
-      );
+      return res.status(404).send('Actividad no encontrada');
     }
 
     if (anterior.status === 'cancelada') {
@@ -738,13 +863,8 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       .eq('id', activityId);
 
     if (updateError) {
-      console.error(
-        'ERROR CANCELANDO ACTIVIDAD:',
-        updateError
-      );
-      return res.status(500).send(
-        'No se pudo cancelar la actividad'
-      );
+      console.error('ERROR CANCELANDO ACTIVIDAD:', updateError);
+      return res.status(500).send('No se pudo cancelar la actividad');
     }
 
     const { error: historyError } = await req.supabase
@@ -763,25 +883,17 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       });
 
     if (historyError) {
-      console.error(
-        'ERROR REGISTRANDO CANCELACIÓN:',
-        historyError
-      );
+      console.error('ERROR REGISTRANDO CANCELACIÓN:', historyError);
       return res.status(500).send(
         'La actividad fue cancelada, pero no se pudo registrar la acción en el historial. Contacta al administrador del sistema.'
       );
     }
 
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${activityId}`
-    );
+    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
 
   } catch (err) {
     console.error('ERROR CANCELAR ACTIVIDAD:', err);
-    return res.status(500).send(
-      'Error interno al cancelar la actividad'
-    );
+    return res.status(500).send('Error interno al cancelar actividad');
   }
 });
 
@@ -809,10 +921,7 @@ router.post('/:id/desvalidar', requireAdmin, async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${activityId}`
-    );
+    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
 
   } catch (err) {
     console.error('ERROR DESVALIDAR ACTIVIDAD:', err);
@@ -854,10 +963,7 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
 
     if (error) throw error;
 
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${activityId}`
-    );
+    return res.redirect(303, `${baseUrl(req)}/${activityId}`);
 
   } catch (err) {
     console.error('ERROR REACTIVAR ACTIVIDAD:', err);
@@ -884,15 +990,11 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
 
     if (error) {
       console.error('ERROR AL BUSCAR ADJUNTO:', error);
-      return res.status(500).send(
-        'Error al consultar el archivo'
-      );
+      return res.status(500).send('Error al consultar el archivo');
     }
 
     if (!att) {
-      return res.status(404).send(
-        'Archivo no encontrado'
-      );
+      return res.status(404).send('Archivo no encontrado');
     }
 
     if (!att.file_path) {
@@ -911,27 +1013,19 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
       .createSignedUrl(att.file_path, 60);
 
     if (signError || !signed?.signedUrl) {
-      console.error(
-        'ERROR AL GENERAR URL FIRMADA:',
-        signError
-      );
+      console.error('ERROR AL GENERAR URL FIRMADA:', signError);
       return res.status(500).send(
         'No se pudo generar el enlace de descarga'
       );
     }
 
-    res.setHeader(
-      'Cache-Control',
-      'no-store, private'
-    );
+    res.setHeader('Cache-Control', 'no-store, private');
 
     return res.redirect(302, signed.signedUrl);
 
   } catch (err) {
     console.error('ERROR AL DESCARGAR ADJUNTO:', err);
-    return res.status(500).send(
-      'Error al descargar el archivo'
-    );
+    return res.status(500).send('Error al descargar el archivo');
   }
 });
 
