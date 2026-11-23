@@ -1,9 +1,6 @@
 
 extends ../layout
 
-// ========================================
-// PAGINACION
-// ========================================
 mixin paginacion
     if totalActividades > 0
         .pagination-container(style='display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:20px 0; padding:15px; border:1px solid #ddd; border-radius:8px;')
@@ -57,9 +54,6 @@ mixin paginacion
                         span.action-btn(style='opacity:.45;') Siguiente ›
                         span.action-btn(style='opacity:.45;') Última »
 
-// ========================================
-// CONTENIDO
-// ========================================
 block content
     .container
         .page-header
@@ -67,9 +61,6 @@ block content
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
 
-        // ========================================
-        // DIAGNOSTICO TEMPORAL
-        // ========================================
         .debug-dashboard(
             style='background:#fff3cd; color:#664d03; padding:15px; margin:15px 0; border:2px solid #ffca2c; border-radius:8px;'
         )
@@ -94,7 +85,6 @@ block content
                 |  #{totalActividades}
 
         if activities && activities.length
-
             +paginacion
 
             .tickets-table-wrapper
@@ -114,11 +104,8 @@ block content
                         each act in activities
                             tr
                                 td.ticket-title= act.title
-
                                 td= act.requester_name || '—'
-
                                 td= act.activity_type || '—'
-
                                 td= act.quantity !== null && act.quantity !== undefined ? act.quantity : '—'
 
                                 td
@@ -132,18 +119,15 @@ block content
                                 td= (act.current_responsible && act.current_responsible.full_name) || 'Sin asignar'
 
                                 td.actions
-                                    // VER ACTIVIDAD
                                     a.action-btn.action-view(
                                         href=dashboardUrl + '/' + act.id
                                     ) Ver
 
-                                    // EDITAR ACTIVIDAD
                                     if user.role === 'admin' && act.status !== 'cancelada'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id + '#administracion'
                                         ) Editar
 
-                                    // TOMAR ACTIVIDAD
                                     if act.status === 'disponible' || act.status === 'devuelta'
                                         form(
                                             method='POST'
@@ -152,7 +136,6 @@ block content
                                         )
                                             button.action-btn(type='submit') Tomar
 
-                                    // TERMINAR Y LIBERAR
                                     if act.status === 'en_proceso' && (act.current_responsible_id === user.id || user.role === 'admin')
                                         form(
                                             method='POST'
@@ -170,7 +153,6 @@ block content
                                         )
                                             button.action-btn(type='submit') Liberar
 
-                                    // VALIDAR Y DEVOLVER
                                     if act.status === 'pendiente_validacion' && user.role === 'admin'
                                         form(
                                             method='POST'
@@ -186,13 +168,11 @@ block content
                                         )
                                             button.action-btn(type='submit') Devolver
 
-                                    // DESVALIDAR
                                     if act.status === 'validada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
                                         ) Desvalidar
 
-                                    // REACTIVAR
                                     if act.status === 'cancelada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
