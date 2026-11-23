@@ -148,17 +148,18 @@ function validarBase64(contenido) {
   );
 }
 
+
 // ========================================
 // NORMALIZAR ENCABEZADOS DE EXCEL
 // ========================================
 
 function normalizarEncabezado(valor = '') {
-  return String(valor)
+  return String(valor ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u00A0\u202F\u2007]/g, ' ')
     .toUpperCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/[^A-Z0-9]/g, '');
 }
 
 // ========================================
@@ -169,8 +170,15 @@ function contarModelosExcel(attachments = []) {
   const codigosUnicos = new Set();
   const archivosLeidos = [];
   const errores = [];
+  const diagnostico = [];
 
   let estructuraEncontrada = false;
+
+  const encabezadosValidos = [
+    'CODIGOSAP',
+    'CODIGODESAP',
+    'CODIGOPRODUCTO'
+  ];
 
   for (const att of attachments) {
     if (!att?.name || !att?.contentBytes) continue;
@@ -183,11 +191,7 @@ function contarModelosExcel(attachments = []) {
 
     try {
       if (!validarBase64(att.contentBytes)) {
-        errores.push({
-          archivo: att.name,
-          error: 'Contenido Base64 inválido'
-        });
-        continue;
+        throw new Error('Contenido Base64 inválido');
       }
 
       const buffer = Buffer.from(
@@ -196,11 +200,7 @@ function contarModelosExcel(attachments = []) {
       );
 
       if (!buffer.length) {
-        errores.push({
-          archivo: att.name,
-          error: 'Archivo vacío'
-        });
-        continue;
+        throw new Error('Archivo vacío');
       }
 
       const workbook = XLSX.read(buffer, {
@@ -208,17 +208,33 @@ function contarModelosExcel(attachments = []) {
         cellDates: false
       });
 
+      const diagnosticoArchivo = {
+        archivo: att.name,
+        hojas: []
+      };
+
+      let codigosArchivo = 0;
+
       for (const nombreHoja of workbook.SheetNames) {
         const hoja = workbook.Sheets[nombreHoja];
 
         const filas = XLSX.utils.sheet_to_json(hoja, {
           header: 1,
           defval: '',
-          raw: false
+          raw: false,
+          blankrows: false
         });
 
-        // Buscar CODIGO SAP en las primeras 15 filas.
-        const limite = Math.min(filas.length, 15);
+        const resultadoHoja = {
+          nombre: nombreHoja,
+          encabezado_encontrado: false,
+          fila_encabezado: null,
+          columna_codigo: null,
+          codigos_detectados: 0
+        };
+
+        // Buscar encabezados en las primeras 30 filas.
+        const limite = Math.min(filas.length, 30);
 
         let filaEncabezado = -1;
         let columnaCodigo = -1;
@@ -226,9 +242,11 @@ function contarModelosExcel(attachments = []) {
         for (let i = 0; i < limite; i++) {
           const fila = filas[i] || [];
 
-          const indice = fila.findIndex(celda =>
-            normalizarEncabezado(celda) === 'CODIGO SAP'
-          );
+          const indice = fila.findIndex(celda => {
+            const encabezado = normalizarEncabezado(celda);
+
+            return encabezadosValidos.includes(encabezado);
+          });
 
           if (indice !== -1) {
             filaEncabezado = i;
@@ -237,9 +255,19 @@ function contarModelosExcel(attachments = []) {
           }
         }
 
-        if (filaEncabezado === -1) continue;
+        if (filaEncabezado === -1) {
+          resultadoHoja.motivo =
+            'No se encontró una columna de código SAP';
+
+          diagnosticoArchivo.hojas.push(resultadoHoja);
+          continue;
+        }
 
         estructuraEncontrada = true;
+
+        resultadoHoja.encabezado_encontrado = true;
+        resultadoHoja.fila_encabezado = filaEncabezado + 1;
+        resultadoHoja.columna_codigo = columnaCodigo + 1;
 
         // Leer los códigos debajo del encabezado.
         for (
@@ -247,36 +275,49 @@ function contarModelosExcel(attachments = []) {
           i < filas.length;
           i++
         ) {
-          const valor = String(
+          const valorOriginal = String(
             filas[i]?.[columnaCodigo] ?? ''
           ).trim();
 
-          if (!valor) continue;
+          if (!valorOriginal) continue;
 
-          const codigo = normalizarEncabezado(valor);
+          const codigo = normalizarEncabezado(valorOriginal);
 
-          // Ignorar encabezados repetidos y valores no válidos.
           if (
+            !codigo ||
             [
-              'CODIGO SAP',
+              'CODIGOSAP',
               'TOTAL',
-              'N/A',
               'NA',
-              'S/C',
-              '-'
+              'NC',
+              'SC'
             ].includes(codigo)
           ) {
             continue;
           }
 
-          // Evitar contar valores que no parezcan códigos.
+          // Los códigos deben contener al menos un número.
           if (!/\d/.test(codigo)) continue;
 
+          const cantidadAnterior = codigosUnicos.size;
+
           codigosUnicos.add(codigo);
+
+          if (codigosUnicos.size > cantidadAnterior) {
+            resultadoHoja.codigos_detectados++;
+            codigosArchivo++;
+          }
         }
+
+        diagnosticoArchivo.hojas.push(resultadoHoja);
       }
 
       archivosLeidos.push(att.name);
+
+      diagnosticoArchivo.total_codigos_unicos_archivo =
+        codigosArchivo;
+
+      diagnostico.push(diagnosticoArchivo);
 
     } catch (error) {
       errores.push({
@@ -292,7 +333,7 @@ function contarModelosExcel(attachments = []) {
     }
   }
 
-  return {
+  const resultado = {
     quantity: estructuraEncontrada
       ? codigosUnicos.size
       : null,
@@ -303,8 +344,16 @@ function contarModelosExcel(attachments = []) {
 
     estructura_encontrada: estructuraEncontrada,
     archivos_leidos: archivosLeidos,
-    errores
+    errores,
+    diagnostico
   };
+
+  console.log(
+    'DIAGNOSTICO DETALLADO EXCEL:',
+    JSON.stringify(resultado, null, 2)
+  );
+
+  return resultado;
 }
 
 // ========================================
