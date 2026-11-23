@@ -148,7 +148,6 @@ function validarBase64(contenido) {
   );
 }
 
-
 // ========================================
 // NORMALIZAR ENCABEZADOS DE EXCEL
 // ========================================
@@ -606,6 +605,13 @@ router.post('/capturas', async (req, res) => {
       datosClasificacion
     );
 
+    // Garantizar que las etiquetas sean un arreglo.
+    const operationalTags = Array.isArray(
+      clasificacion.operational_tags
+    )
+      ? clasificacion.operational_tags
+      : [];
+
     // 8. Detectar prioridad.
     const prioridadDetectada = detectarPrioridad({
       subject: title,
@@ -674,11 +680,14 @@ router.post('/capturas', async (req, res) => {
       // Clasificación original.
       activity_type: clasificacion.activity_type,
 
-      // Nueva organización por depósitos.
+      // Clasificación por categoría.
       catalog_category: clasificacion.catalog_category,
       classification_status: clasificacion.classification_status,
       classification_confidence: clasificacion.classification_confidence,
       matched_terms: clasificacion.matched_terms,
+
+      // Etiquetas operativas: OL04, DDD, PVC, etc.
+      operational_tags: operationalTags,
 
       observations:
         textoOpcional(payload.observations) ||
@@ -733,8 +742,9 @@ router.post('/capturas', async (req, res) => {
         action: 'creada_por_correo',
         new_status: 'disponible',
         comments:
-          `Ingresada desde Outlook. Depósito: ${clasificacion.catalog_category}. ` +
+          `Ingresada desde Outlook. Categoría: ${clasificacion.catalog_category}. ` +
           `Tipo: ${clasificacion.activity_type}. ` +
+          `Etiquetas: ${operationalTags.length > 0 ? operationalTags.join(', ') : 'Ninguna'}. ` +
           `Modelos: ${quantity ?? 'No detectados'}.`
       });
 
@@ -768,7 +778,8 @@ router.post('/capturas', async (req, res) => {
     console.log('====== WEBHOOK OUTLOOK ======');
     console.log('Actividad:', created.id);
     console.log('Correo:', messageId);
-    console.log('Depósito:', clasificacion.catalog_category);
+    console.log('Categoría:', clasificacion.catalog_category);
+    console.log('Etiquetas operativas:', operationalTags);
     console.log(
       'Clasificación:',
       clasificacion.classification_status
@@ -790,6 +801,9 @@ router.post('/capturas', async (req, res) => {
 
       activity_type: clasificacion.activity_type,
       catalog_category: clasificacion.catalog_category,
+
+      // Etiquetas operativas detectadas.
+      operational_tags: operationalTags,
 
       priority,
       status: 'disponible',
