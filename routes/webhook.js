@@ -428,23 +428,34 @@ router.post('/capturas', async (req, res) => {
       }
     }
 
-    // 10. Preparar actividad
-    const activity = {
-      source_type: 'outlook',
-      source_email_id: messageId,
-      title,
-      requester_name: textoOpcional(payload.from_name),
-      requester_email: textoOpcional(payload.from_email),
-      quantity,
-      priority,
-      activity_type: clasificacion.activity_type,
-      observations:
-        textoOpcional(payload.observations) ||
-        textoOpcional(payload.body_preview) ||
-        textoOpcional(payload.body),
-      status: 'disponible',
-      received_at: receivedAt
-    };
+    
+const activity = {
+  source_type: 'outlook',
+  source_email_id: messageId,
+  title,
+  requester_name: textoOpcional(payload.from_name),
+  requester_email: textoOpcional(payload.from_email),
+  quantity,
+  priority,
+
+  // Clasificación original
+  activity_type: clasificacion.activity_type,
+
+  // Nueva organización por depósitos
+  catalog_category: clasificacion.catalog_category,
+  classification_status: clasificacion.classification_status,
+  classification_confidence: clasificacion.classification_confidence,
+  matched_terms: clasificacion.matched_terms,
+
+  observations:
+    textoOpcional(payload.observations) ||
+    textoOpcional(payload.body_preview) ||
+    textoOpcional(payload.body),
+
+  status: 'disponible',
+  received_at: receivedAt
+};
+
 
     // 11. Insertar actividad
     const { data: created, error: insertError } = await db
@@ -490,7 +501,7 @@ router.post('/capturas', async (req, res) => {
         action: 'creada_por_correo',
         new_status: 'disponible',
         comments:
-          `Ingresada desde Outlook. Tipo detectado: ${clasificacion.activity_type}.`
+  `Ingresada desde Outlook. Depósito: ${clasificacion.catalog_category}. Tipo: ${clasificacion.activity_type}.`
       });
 
     if (historyError) {
@@ -523,7 +534,8 @@ router.post('/capturas', async (req, res) => {
     console.log('====== WEBHOOK OUTLOOK ======');
     console.log('Actividad:', created.id);
     console.log('Correo:', messageId);
-    console.log('Tipo:', clasificacion.activity_type);
+    console.log('Depósito:', clasificacion.catalog_category);
+    console.log('Clasificación:', clasificacion.classification_status);
     console.log('Prioridad:', priority);
     console.log('Adjuntos:', resultadoAdjuntos);
     console.log('=============================');
@@ -539,7 +551,7 @@ router.post('/capturas', async (req, res) => {
       status: 'disponible',
       classification_status:
         clasificacion.classification_status,
-      confidence: clasificacion.confidence,
+      confidence: clasificacion.classification_confidence,
       attachments: resultadoAdjuntos,
       history_registered: !historyError
     });
