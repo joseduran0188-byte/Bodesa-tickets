@@ -908,3 +908,64 @@ footer {
     flex: 0 0 260px;
   }
 }
+/* ========================================
+   PAGINACIÓN DE ACTIVIDADES
+======================================== */
+
+.pagination-summary {
+    margin: 15px 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.pagination-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 25px 0;
+}
+
+.pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pagination-link,
+.pagination-current {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.pagination-link {
+    color: #333;
+    background: #fff;
+}
+
+.pagination-link:hover {
+    background: #f0f0f0;
+}
+
+.pagination-current {
+    color: #fff;
+    background: #2457a6;
+    border-color: #2457a6;
+    font-weight: bold;
+}
+
+.pagination-info {
+    width: 100%;
+    text-align: center;
+    color: #777;
+    font-size: 13px;
+}

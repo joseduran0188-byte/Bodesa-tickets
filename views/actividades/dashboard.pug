@@ -8,6 +8,17 @@ block content
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
 
+        //- Resumen de registros
+        .pagination-summary
+            p
+                | Mostrando 
+                strong= desdeRegistro
+                |  a 
+                strong= hastaRegistro
+                |  de 
+                strong= totalActividades
+                |  actividades
+
         if activities && activities.length
             .tickets-table-wrapper
                 table.tickets-table
@@ -99,6 +110,35 @@ block content
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
                                         ) Reactivar
+
+            //- Controles de paginación
+            if totalPaginas > 1
+                .pagination-container
+                    if tienePaginaAnterior
+                        a.action-btn.action-view(
+                            href=dashboardUrl + '?page=' + paginaAnterior
+                        ) « Anterior
+                    else
+                        span.action-btn(disabled) « Anterior
+
+                    .pagination-pages
+                        each numero in paginas
+                            if numero === paginaActual
+                                span.pagination-current= numero
+                            else
+                                a.pagination-link(
+                                    href=dashboardUrl + '?page=' + numero
+                                )= numero
+
+                    if tienePaginaSiguiente
+                        a.action-btn.action-view(
+                            href=dashboardUrl + '?page=' + paginaSiguiente
+                        ) Siguiente »
+                    else
+                        span.action-btn(disabled) Siguiente »
+
+                    span.pagination-info
+                        | Página #{paginaActual} de #{totalPaginas}
 
         else
             .empty-state
