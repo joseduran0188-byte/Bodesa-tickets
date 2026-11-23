@@ -1,8 +1,11 @@
 
 extends ../layout
 
+// ========================================
+// PAGINACION
+// ========================================
 mixin paginacion
-    if totalPaginas > 1
+    if totalActividades > 0
         .pagination-container(style='display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:20px 0; padding:15px; border:1px solid #ddd; border-radius:8px;')
             .pagination-info(style='font-size:14px;')
                 | Mostrando 
@@ -13,52 +16,82 @@ mixin paginacion
                 strong= totalActividades
                 |  actividades
 
-            .pagination-controls(style='display:flex; flex-wrap:wrap; align-items:center; gap:6px;')
-                if tienePaginaAnterior
-                    a.action-btn.action-view(
-                        href=dashboardUrl + '?page=1'
-                        style='text-decoration:none;'
-                    ) « Primera
-
-                    a.action-btn.action-view(
-                        href=dashboardUrl + '?page=' + paginaAnterior
-                        style='text-decoration:none;'
-                    ) ‹ Anterior
-                else
-                    span.action-btn(style='opacity:.45;') « Primera
-                    span.action-btn(style='opacity:.45;') ‹ Anterior
-
-                each numeroPagina in paginas
-                    if numeroPagina === paginaActual
-                        span.action-btn(
-                            style='background:#2563eb; color:white; font-weight:bold;'
-                        )= numeroPagina
-                    else
+            if totalPaginas > 1
+                .pagination-controls(style='display:flex; flex-wrap:wrap; align-items:center; gap:6px;')
+                    if tienePaginaAnterior
                         a.action-btn.action-view(
-                            href=dashboardUrl + '?page=' + numeroPagina
+                            href=dashboardUrl + '?page=1'
                             style='text-decoration:none;'
-                        )= numeroPagina
+                        ) « Primera
 
-                if tienePaginaSiguiente
-                    a.action-btn.action-view(
-                        href=dashboardUrl + '?page=' + paginaSiguiente
-                        style='text-decoration:none;'
-                    ) Siguiente ›
+                        a.action-btn.action-view(
+                            href=dashboardUrl + '?page=' + paginaAnterior
+                            style='text-decoration:none;'
+                        ) ‹ Anterior
+                    else
+                        span.action-btn(style='opacity:.45;') « Primera
+                        span.action-btn(style='opacity:.45;') ‹ Anterior
 
-                    a.action-btn.action-view(
-                        href=dashboardUrl + '?page=' + totalPaginas
-                        style='text-decoration:none;'
-                    ) Última »
-                else
-                    span.action-btn(style='opacity:.45;') Siguiente ›
-                    span.action-btn(style='opacity:.45;') Última »
+                    each numeroPagina in paginas
+                        if numeroPagina === paginaActual
+                            span.action-btn(
+                                style='background:#2563eb; color:white; font-weight:bold;'
+                            )= numeroPagina
+                        else
+                            a.action-btn.action-view(
+                                href=dashboardUrl + '?page=' + numeroPagina
+                                style='text-decoration:none;'
+                            )= numeroPagina
 
+                    if tienePaginaSiguiente
+                        a.action-btn.action-view(
+                            href=dashboardUrl + '?page=' + paginaSiguiente
+                            style='text-decoration:none;'
+                        ) Siguiente ›
+
+                        a.action-btn.action-view(
+                            href=dashboardUrl + '?page=' + totalPaginas
+                            style='text-decoration:none;'
+                        ) Última »
+                    else
+                        span.action-btn(style='opacity:.45;') Siguiente ›
+                        span.action-btn(style='opacity:.45;') Última »
+
+// ========================================
+// CONTENIDO
+// ========================================
 block content
     .container
         .page-header
             div
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
+
+        // ========================================
+        // DIAGNOSTICO TEMPORAL
+        // ========================================
+        .debug-dashboard(
+            style='background:#fff3cd; color:#664d03; padding:15px; margin:15px 0; border:2px solid #ffca2c; border-radius:8px;'
+        )
+            h3(style='margin-top:0;') DIAGNÓSTICO DE PLANTILLA
+            p
+                strong Versión:
+                |  DASHBOARD PAGINACIÓN 2026-11-22
+            p
+                strong Rol:
+                |  #{user.role}
+            p
+                strong Registros recibidos:
+                |  #{activities.length}
+            p
+                strong Página actual:
+                |  #{paginaActual}
+            p
+                strong Total de páginas:
+                |  #{totalPaginas}
+            p
+                strong Total de actividades:
+                |  #{totalActividades}
 
         if activities && activities.length
 
