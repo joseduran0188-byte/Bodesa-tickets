@@ -547,9 +547,10 @@ router.get('/', async (req, res) => {
     // ------------------------------------
 
     if (etiquetaFiltro) {
-      consulta = consulta.contains(
+      consulta = consulta.filter(
         'operational_tags',
-        [etiquetaFiltro]
+        'cs',
+        JSON.stringify([etiquetaFiltro])
       );
     }
 
