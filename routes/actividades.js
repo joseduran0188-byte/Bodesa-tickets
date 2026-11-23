@@ -1664,10 +1664,34 @@ router.get('/:id/adjunto/:attachmentId', async (req, res) => {
 
 router.post('/:id/tomar', async (req, res) => {
   try {
+    // Obtener y limpiar el nombre enviado desde el formulario.
+    const responsibleName = String(
+      req.body?.responsible_name || ''
+    ).trim();
+
+    // Validar que se haya escrito un nombre.
+    if (!responsibleName) {
+      return res.redirect(
+        303,
+        `${baseUrl(req)}?error=${encodeURIComponent('Debes escribir el nombre del responsable.')}`
+      );
+    }
+
+    // Validar la longitud máxima.
+    if (responsibleName.length > 120) {
+      return res.redirect(
+        303,
+        `${baseUrl(req)}?error=${encodeURIComponent('El nombre no puede superar los 120 caracteres.')}`
+      );
+    }
+
+    // Enviar el ID de la actividad y el nombre capturado.
+    // La función SQL obtiene el ID real del usuario con auth.uid().
     const { error } = await req.supabase.rpc(
       'tomar_actividad',
       {
-        p_activity_id: req.params.id
+        p_activity_id: req.params.id,
+        p_responsible_name: responsibleName
       }
     );
 

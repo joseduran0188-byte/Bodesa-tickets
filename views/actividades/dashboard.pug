@@ -5,11 +5,11 @@ mixin paginacion
     if totalActividades > 0
         .pagination-container(style='display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:20px 0; padding:15px; border:1px solid #ddd; border-radius:8px;')
             .pagination-info(style='font-size:14px;')
-                | Mostrando 
+                | Mostrando
                 strong= desdeRegistro
-                |  a 
+                |  a
                 strong= hastaRegistro
-                |  de 
+                |  de
                 strong= totalActividades
                 |  actividades
 
@@ -61,7 +61,7 @@ block content
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
 
-        // DIAGNOSTICO
+        // DIAGNÓSTICO
         .debug-dashboard(
             style='background:#fff3cd; color:#664d03; padding:15px; margin:15px 0; border:2px solid #ffca2c; border-radius:8px;'
         )
@@ -69,7 +69,7 @@ block content
 
             p
                 strong Versión:
-                |  DASHBOARD CATEGORÍAS Y ETIQUETAS
+                |  DASHBOARD CATEGORÍAS, ETIQUETAS Y RESPONSABLES
 
             p
                 strong Rol:
@@ -134,7 +134,7 @@ block content
                             h2(style='margin:8px 0 0; font-size:26px;')
                                 = estado.total.toLocaleString('es-MX')
 
-                // RESUMEN POR CATEGORIA
+                // RESUMEN POR CATEGORÍA
                 h2(style='margin:25px 0 15px;')
                     | Actividades por categoría
 
@@ -282,7 +282,14 @@ block content
                                     span(class='badge badge-estado-' + act.status)
                                         = act.status
 
-                                td= (act.current_responsible && act.current_responsible.full_name) || 'Sin asignar'
+                                // RESPONSABLE CAPTURADO
+                                td
+                                    if act.current_responsible_name
+                                        strong= act.current_responsible_name
+                                    else if act.current_responsible && act.current_responsible.full_name
+                                        = act.current_responsible.full_name
+                                    else
+                                        span(style='color:#888;') Sin asignar
 
                                 td.actions
                                     a.action-btn.action-view(
@@ -294,13 +301,27 @@ block content
                                             href=dashboardUrl + '/' + act.id + '#administracion'
                                         ) Editar
 
+                                    // FORMULARIO PARA TOMAR ACTIVIDAD
                                     if act.status === 'disponible' || act.status === 'devuelta'
                                         form(
                                             method='POST'
                                             action=dashboardUrl + '/' + act.id + '/tomar'
-                                            style='display:inline-block'
+                                            style='display:inline-flex; flex-direction:column; gap:6px; min-width:180px;'
                                         )
-                                            button.action-btn(type='submit') Tomar
+                                            input(
+                                                type='text'
+                                                name='responsible_name'
+                                                placeholder='Nombre del responsable'
+                                                required
+                                                maxlength='120'
+                                                autocomplete='off'
+                                                style='padding:8px; border:1px solid #ccc; border-radius:6px; width:100%;'
+                                            )
+
+                                            button.action-btn(
+                                                type='submit'
+                                                style='width:100%;'
+                                            ) Tomar actividad
 
                                     if act.status === 'en_proceso' && (act.current_responsible_id === user.id || user.role === 'admin')
                                         form(
@@ -352,6 +373,7 @@ block content
 
                 if categoriaFiltro || etiquetaFiltro
                     p No se encontraron actividades con los filtros seleccionados.
+
                     a.action-btn.action-view(href=dashboardUrl)
                         | Limpiar filtros
                 else
