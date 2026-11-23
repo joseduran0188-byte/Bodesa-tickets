@@ -18,6 +18,12 @@ html(lang="es")
             referrerpolicy="no-referrer"
         )
 
+        //- SweetAlert2
+        link(
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css"
+        )
+
     body
         if user
             header.header
@@ -84,3 +90,9 @@ html(lang="es")
         footer
             .container
                 p Sistema de Gestión de Tickets - Departamento de TI · Bodesa
+
+        //- Biblioteca SweetAlert2
+        script(src="https://cdn.jsdelivr.net/npm/sweetalert2@11")
+
+        //- Configuración global de alertas y confirmaciones
+        script(src="/js/sweetalert-config.js")
