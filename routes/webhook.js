@@ -1,6 +1,8 @@
 
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const XLSX = require('xlsx');
+
 const {
   randomUUID,
   timingSafeEqual
@@ -82,7 +84,8 @@ function validarSecreto(recibido) {
     console.log('Secreto configurado:', esperadoConfigurado);
     console.log('Longitud recibida:', longitudRecibida);
     console.log('Longitud configurada:', longitudEsperada);
-    console.log('Coinciden longitudes:',
+    console.log(
+      'Coinciden longitudes:',
       longitudRecibida === longitudEsperada
     );
     console.log('=================================');
@@ -143,6 +146,165 @@ function validarBase64(contenido) {
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
     limpio
   );
+}
+
+// ========================================
+// NORMALIZAR ENCABEZADOS DE EXCEL
+// ========================================
+
+function normalizarEncabezado(valor = '') {
+  return String(valor)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ========================================
+// CONTAR MODELOS DE ARCHIVOS EXCEL
+// ========================================
+
+function contarModelosExcel(attachments = []) {
+  const codigosUnicos = new Set();
+  const archivosLeidos = [];
+  const errores = [];
+
+  let estructuraEncontrada = false;
+
+  for (const att of attachments) {
+    if (!att?.name || !att?.contentBytes) continue;
+
+    const extension = obtenerExtension(att.name);
+
+    if (!['xlsx', 'xlsm', 'xls'].includes(extension)) {
+      continue;
+    }
+
+    try {
+      if (!validarBase64(att.contentBytes)) {
+        errores.push({
+          archivo: att.name,
+          error: 'Contenido Base64 inválido'
+        });
+        continue;
+      }
+
+      const buffer = Buffer.from(
+        att.contentBytes.replace(/\s/g, ''),
+        'base64'
+      );
+
+      if (!buffer.length) {
+        errores.push({
+          archivo: att.name,
+          error: 'Archivo vacío'
+        });
+        continue;
+      }
+
+      const workbook = XLSX.read(buffer, {
+        type: 'buffer',
+        cellDates: false
+      });
+
+      for (const nombreHoja of workbook.SheetNames) {
+        const hoja = workbook.Sheets[nombreHoja];
+
+        const filas = XLSX.utils.sheet_to_json(hoja, {
+          header: 1,
+          defval: '',
+          raw: false
+        });
+
+        // Buscar CODIGO SAP en las primeras 15 filas.
+        const limite = Math.min(filas.length, 15);
+
+        let filaEncabezado = -1;
+        let columnaCodigo = -1;
+
+        for (let i = 0; i < limite; i++) {
+          const fila = filas[i] || [];
+
+          const indice = fila.findIndex(celda =>
+            normalizarEncabezado(celda) === 'CODIGO SAP'
+          );
+
+          if (indice !== -1) {
+            filaEncabezado = i;
+            columnaCodigo = indice;
+            break;
+          }
+        }
+
+        if (filaEncabezado === -1) continue;
+
+        estructuraEncontrada = true;
+
+        // Leer los códigos debajo del encabezado.
+        for (
+          let i = filaEncabezado + 1;
+          i < filas.length;
+          i++
+        ) {
+          const valor = String(
+            filas[i]?.[columnaCodigo] ?? ''
+          ).trim();
+
+          if (!valor) continue;
+
+          const codigo = normalizarEncabezado(valor);
+
+          // Ignorar encabezados repetidos y valores no válidos.
+          if (
+            [
+              'CODIGO SAP',
+              'TOTAL',
+              'N/A',
+              'NA',
+              'S/C',
+              '-'
+            ].includes(codigo)
+          ) {
+            continue;
+          }
+
+          // Evitar contar valores que no parezcan códigos.
+          if (!/\d/.test(codigo)) continue;
+
+          codigosUnicos.add(codigo);
+        }
+      }
+
+      archivosLeidos.push(att.name);
+
+    } catch (error) {
+      errores.push({
+        archivo: att.name,
+        error: error.message
+      });
+
+      console.error(
+        'ERROR LEYENDO EXCEL:',
+        att.name,
+        error.message
+      );
+    }
+  }
+
+  return {
+    quantity: estructuraEncontrada
+      ? codigosUnicos.size
+      : null,
+
+    quantity_source: estructuraEncontrada
+      ? 'excel'
+      : null,
+
+    estructura_encontrada: estructuraEncontrada,
+    archivos_leidos: archivosLeidos,
+    errores
+  };
 }
 
 // ========================================
@@ -282,16 +444,18 @@ router.post('/capturas', async (req, res) => {
       console.log('====== SOLICITUD RECIBIDA ======');
       console.log('Método:', req.method);
       console.log('Content-Type:', req.headers['content-type']);
-      console.log('Body recibido como objeto:',
+      console.log(
+        'Body recibido como objeto:',
         typeof payload === 'object' && payload !== null
       );
-      console.log('Se recibió propiedad secret:',
+      console.log(
+        'Se recibió propiedad secret:',
         Object.prototype.hasOwnProperty.call(payload, 'secret')
       );
       console.log('================================');
     }
 
-    // 1. Validar secreto
+    // 1. Validar secreto.
     if (!validarSecreto(payload.secret)) {
       return res.status(401).json({
         ok: false,
@@ -307,7 +471,7 @@ router.post('/capturas', async (req, res) => {
 
     const db = getSupabaseAdmin();
 
-    // 2. Validar asunto
+    // 2. Validar asunto.
     const title = textoOpcional(payload.subject);
 
     if (!title) {
@@ -324,7 +488,7 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 3. Validar identificador del correo
+    // 3. Validar identificador del correo.
     const messageId = textoOpcional(payload.message_id);
 
     if (!messageId) {
@@ -334,7 +498,7 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 4. Validar fecha
+    // 4. Validar fecha.
     const receivedAt = obtenerFecha(payload.received_at);
 
     if (!receivedAt) {
@@ -344,12 +508,12 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 5. Validar adjuntos
+    // 5. Validar adjuntos.
     const attachments = Array.isArray(payload.attachments)
       ? payload.attachments
       : [];
 
-    // 6. Evitar duplicados
+    // 6. Evitar correos duplicados.
     const { data: existing, error: duplicateError } = await db
       .from('activities')
       .select('id')
@@ -378,7 +542,7 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 7. Clasificación automática
+    // 7. Clasificación automática.
     const datosClasificacion = {
       subject: title,
       body:
@@ -393,7 +557,7 @@ router.post('/capturas', async (req, res) => {
       datosClasificacion
     );
 
-    // 8. Detectar prioridad
+    // 8. Detectar prioridad.
     const prioridadDetectada = detectarPrioridad({
       subject: title,
       body: datosClasificacion.body
@@ -410,10 +574,16 @@ router.post('/capturas', async (req, res) => {
           ? prioridadRecibida
           : 'media';
 
-    // 9. Validar cantidad
-    let quantity = null;
+    // 9. Contar modelos en Excel.
+    const resultadoExcel = contarModelosExcel(attachments);
 
+    let quantity = resultadoExcel.quantity;
+    let quantitySource = resultadoExcel.quantity_source;
+
+    // Si no se reconoce el Excel, usar la cantidad del payload
+    // únicamente cuando sea un entero no negativo.
     if (
+      quantity === null &&
       payload.quantity !== undefined &&
       payload.quantity !== null &&
       String(payload.quantity).trim() !== ''
@@ -425,39 +595,52 @@ router.post('/capturas', async (req, res) => {
         cantidad >= 0
       ) {
         quantity = cantidad;
+        quantitySource = 'payload';
       }
     }
 
-    
-const activity = {
-  source_type: 'outlook',
-  source_email_id: messageId,
-  title,
-  requester_name: textoOpcional(payload.from_name),
-  requester_email: textoOpcional(payload.from_email),
-  quantity,
-  priority,
+    console.log('====== CONTEO DE MODELOS ======');
+    console.log('Cantidad:', quantity);
+    console.log('Origen:', quantitySource);
+    console.log('Archivos:', resultadoExcel.archivos_leidos);
+    console.log(
+      'Estructura encontrada:',
+      resultadoExcel.estructura_encontrada
+    );
+    console.log('================================');
 
-  // Clasificación original
-  activity_type: clasificacion.activity_type,
+    // 10. Preparar actividad.
+    const activity = {
+      source_type: 'outlook',
+      source_email_id: messageId,
+      title,
 
-  // Nueva organización por depósitos
-  catalog_category: clasificacion.catalog_category,
-  classification_status: clasificacion.classification_status,
-  classification_confidence: clasificacion.classification_confidence,
-  matched_terms: clasificacion.matched_terms,
+      requester_name: textoOpcional(payload.from_name),
+      requester_email: textoOpcional(payload.from_email),
 
-  observations:
-    textoOpcional(payload.observations) ||
-    textoOpcional(payload.body_preview) ||
-    textoOpcional(payload.body),
+      quantity,
+      quantity_source: quantitySource,
+      priority,
 
-  status: 'disponible',
-  received_at: receivedAt
-};
+      // Clasificación original.
+      activity_type: clasificacion.activity_type,
 
+      // Nueva organización por depósitos.
+      catalog_category: clasificacion.catalog_category,
+      classification_status: clasificacion.classification_status,
+      classification_confidence: clasificacion.classification_confidence,
+      matched_terms: clasificacion.matched_terms,
 
-    // 11. Insertar actividad
+      observations:
+        textoOpcional(payload.observations) ||
+        textoOpcional(payload.body_preview) ||
+        textoOpcional(payload.body),
+
+      status: 'disponible',
+      received_at: receivedAt
+    };
+
+    // 11. Insertar actividad.
     const { data: created, error: insertError } = await db
       .from('activities')
       .insert(activity)
@@ -493,7 +676,7 @@ const activity = {
       });
     }
 
-    // 12. Registrar historial
+    // 12. Registrar historial.
     const { error: historyError } = await db
       .from('activity_history')
       .insert({
@@ -501,7 +684,9 @@ const activity = {
         action: 'creada_por_correo',
         new_status: 'disponible',
         comments:
-  `Ingresada desde Outlook. Depósito: ${clasificacion.catalog_category}. Tipo: ${clasificacion.activity_type}.`
+          `Ingresada desde Outlook. Depósito: ${clasificacion.catalog_category}. ` +
+          `Tipo: ${clasificacion.activity_type}. ` +
+          `Modelos: ${quantity ?? 'No detectados'}.`
       });
 
     if (historyError) {
@@ -511,7 +696,7 @@ const activity = {
       );
     }
 
-    // 13. Procesar adjuntos
+    // 13. Procesar adjuntos y guardarlos en Storage.
     let resultadoAdjuntos = {
       total: 0,
       exitosos: 0,
@@ -526,7 +711,7 @@ const activity = {
       );
     }
 
-    // 14. Respuesta
+    // 14. Preparar respuesta.
     const tieneErrores =
       resultadoAdjuntos.fallidos > 0 ||
       Boolean(historyError);
@@ -535,23 +720,50 @@ const activity = {
     console.log('Actividad:', created.id);
     console.log('Correo:', messageId);
     console.log('Depósito:', clasificacion.catalog_category);
-    console.log('Clasificación:', clasificacion.classification_status);
+    console.log(
+      'Clasificación:',
+      clasificacion.classification_status
+    );
     console.log('Prioridad:', priority);
+    console.log('Cantidad de modelos:', quantity);
+    console.log('Origen cantidad:', quantitySource);
     console.log('Adjuntos:', resultadoAdjuntos);
     console.log('=============================');
 
     return res.status(201).json({
       ok: true,
+
       message: tieneErrores
         ? 'Actividad registrada con incidencias parciales'
         : 'Actividad registrada correctamente',
+
       id: created.id,
+
       activity_type: clasificacion.activity_type,
+      catalog_category: clasificacion.catalog_category,
+
       priority,
       status: 'disponible',
+
       classification_status:
         clasificacion.classification_status,
-      confidence: clasificacion.classification_confidence,
+
+      classification_confidence:
+        clasificacion.classification_confidence,
+
+      matched_terms: clasificacion.matched_terms,
+
+      quantity,
+      quantity_source: quantitySource,
+
+      excel: {
+        estructura_encontrada:
+          resultadoExcel.estructura_encontrada,
+        archivos_leidos:
+          resultadoExcel.archivos_leidos,
+        errores: resultadoExcel.errores
+      },
+
       attachments: resultadoAdjuntos,
       history_registered: !historyError
     });
