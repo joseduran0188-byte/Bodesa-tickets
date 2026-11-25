@@ -1514,10 +1514,7 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       );
     }
 
-    const {
-      data,
-      error
-    } = await req.supabase.rpc(
+    const { data, error } = await req.supabase.rpc(
       'cancelar_actividad',
       {
         p_activity_id: activityId,
@@ -1526,40 +1523,32 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
     );
 
     if (error) {
-      console.error(
-        'ERROR CANCELANDO ACTIVIDAD:',
-        error
-      );
+      console.error('ERROR CANCELANDO ACTIVIDAD:', error);
 
-      if (
-        error.message?.includes('Actividad no encontrada')
-      ) {
+      const message = error.message || '';
+
+      if (message.includes('Actividad no encontrada')) {
         return res.status(404).send(
           'Actividad no encontrada'
         );
       }
 
-      if (
-        error.message?.includes('ya está cancelada')
-      ) {
+      if (message.includes('ya está cancelada')) {
         return res.status(400).send(
           'La actividad ya se encuentra cancelada'
         );
       }
 
+      if (message.includes('motivo')) {
+        return res.status(400).send(
+          'Debes indicar el motivo de cancelación'
+        );
+      }
+
       return res.status(400).send(
-        error.message || 'No se pudo cancelar la actividad'
+        message || 'No se pudo cancelar la actividad'
       );
     }
-
-    console.log(
-      'ACTIVIDAD CANCELADA:',
-      {
-        activityId,
-        actorId: req.user.id,
-        result: data
-      }
-    );
 
     return res.redirect(
       303,
@@ -1567,10 +1556,7 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
     );
 
   } catch (err) {
-    console.error(
-      'ERROR INTERNO AL CANCELAR ACTIVIDAD:',
-      err
-    );
+    console.error('ERROR CANCELAR ACTIVIDAD:', err);
 
     return res.status(500).send(
       'Error interno al cancelar actividad'
