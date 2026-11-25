@@ -1507,62 +1507,68 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       );
     }
 
-    const {
-      data: anterior,
-      error: readError
-    } = await req.supabase
-      .from('activities')
-      .select('id, status, title')
-      .eq('id', activityId)
-      .maybeSingle();
+    const { data, error } = await req.supabase.rpc(
+      'cancelar_actividad',
+      {
+        p_activity_id: activityId,
+        p_reason: reason
+      }
+    );
 
-    if (readError) {
-      console.error(
-        'ERROR CONSULTANDO ACTIVIDAD PARA CANCELAR:',
-        readError
-      );
-
-      return res.status(500).send(
-        'No se pudo consultar la actividad'
-      );
-    }
-
-    if (!anterior) {
-      return res.status(404).send(
-        'Actividad no encontrada'
-      );
-    }
-
-    if (anterior.status === 'cancelada') {
-      return res.status(400).send(
-        'La actividad ya se encuentra cancelada'
-      );
-    }
-
-    const ahora = new Date().toISOString();
-
-    const {
-      error: updateError
-    } = await req.supabase
-      .from('activities')
-      .update({
-        status: 'cancelada',
-        canceled_at: ahora,
-        cancellation_reason: reason,
-        updated_at: ahora
-      })
-      .eq('id', activityId);
-
-    if (updateError) {
+    if (error) {
       console.error(
         'ERROR CANCELANDO ACTIVIDAD:',
-        updateError
+        error
       );
 
-      return res.status(500).send(
-        'No se pudo cancelar la actividad'
+      // La función SQL controla si la actividad
+      // existe y si ya se encuentra cancelada.
+      if (
+        error.message?.includes('Actividad no encontrada')
+      ) {
+        return res.status(404).send(
+          'Actividad no encontrada'
+        );
+      }
+
+      if (
+        error.message?.includes('ya está cancelada')
+      ) {
+        return res.status(400).send(
+          'La actividad ya se encuentra cancelada'
+        );
+      }
+
+      return res.status(400).send(
+        error.message || 'No se pudo cancelar la actividad'
       );
     }
+
+    console.log(
+      'ACTIVIDAD CANCELADA:',
+      {
+        activityId,
+        actorId: req.user.id,
+        result: data
+      }
+    );
+
+    return res.redirect(
+      303,
+      `${baseUrl(req)}/${activityId}`
+    );
+
+  } catch (err) {
+    console.error(
+      'ERROR INTERNO AL CANCELAR ACTIVIDAD:',
+      err
+    );
+
+    return res.status(500).send(
+      'Error interno al cancelar actividad'
+    );
+  }
+});
 
     const {
       error: historyError
