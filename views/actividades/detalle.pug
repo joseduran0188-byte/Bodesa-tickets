@@ -14,8 +14,8 @@ block content
         //- INFORMACIÓN GENERAL
         .detail-card
             .detail-item
-                strong Remitente:
-                span= activity.requester_name || '—'
+        strong Remitente:
+        span= activity.requester_email || '—'
 
             .detail-item
                 strong Tipo:
@@ -93,12 +93,12 @@ block content
                                 )
 
                             .form-group
-                                label(for='requester_name') Remitente
-                                input#requester_name.form-control(
-                                    type='text'
-                                    name='requester_name'
-                                    value=activity.requester_name || ''
-                                )
+                                label(for='requester_email') Remitente
+                                input#requester_email.form-control(
+                                    type='email'
+                                    name='requester_email'
+                                    value=activity.requester_email || ''
+    )
 
                             .form-group
                                 label(for='activity_type') Tipo de actividad
