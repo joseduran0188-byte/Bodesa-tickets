@@ -67,6 +67,7 @@ function validarSecreto(recibido) {
   const esperado = process.env.WEBHOOK_SECRET;
 
   const recibidoValido = typeof recibido === 'string';
+
   const esperadoConfigurado =
     typeof esperado === 'string' && esperado.length > 0;
 
@@ -460,6 +461,116 @@ async function procesarAdjuntos(activityId, attachments) {
 }
 
 // ========================================
+// RECUPERAR ADJUNTOS DE ACTIVIDADES EXISTENTES
+// ========================================
+
+async function completarAdjuntosExistentes(
+  activityId,
+  attachments = []
+) {
+  const db = getSupabaseAdmin();
+
+  const { data: existentes, error } = await db
+    .from('activity_attachments')
+    .select('file_name')
+    .eq('activity_id', activityId);
+
+  if (error) {
+    throw new Error(
+      'No se pudieron consultar los adjuntos existentes: ' +
+      error.message
+    );
+  }
+
+  // Contar nombres existentes para admitir archivos
+  // distintos que pudieran tener el mismo nombre.
+  const disponibles = new Map();
+
+  for (const archivo of existentes || []) {
+    const nombre = archivo.file_name;
+
+    disponibles.set(
+      nombre,
+      (disponibles.get(nombre) || 0) + 1
+    );
+  }
+
+  const pendientes = [];
+
+  let yaRegistrados = 0;
+
+  for (const archivo of attachments) {
+    const nombre = String(
+      archivo?.name || ''
+    ).slice(0, 255);
+
+    const cantidadExistente =
+      disponibles.get(nombre) || 0;
+
+    if (cantidadExistente > 0) {
+      disponibles.set(nombre, cantidadExistente - 1);
+      yaRegistrados++;
+    } else {
+      pendientes.push(archivo);
+    }
+  }
+
+  let resultadoNuevos = {
+    total: 0,
+    exitosos: 0,
+    fallidos: 0,
+    errores: []
+  };
+
+  if (pendientes.length > 0) {
+    resultadoNuevos = await procesarAdjuntos(
+      activityId,
+      pendientes
+    );
+  }
+
+  const almacenados =
+    yaRegistrados + resultadoNuevos.exitosos;
+
+  const fallidos =
+    resultadoNuevos.fallidos;
+
+  return {
+    // Campos esperados por Apps Script.
+    received: attachments.length,
+    stored: almacenados,
+    failed: fallidos,
+    errors: resultadoNuevos.errores,
+
+    // Compatibilidad con los nombres anteriores.
+    total: attachments.length,
+    exitosos: almacenados,
+    fallidos,
+    errores: resultadoNuevos.errores
+  };
+}
+
+// ========================================
+// FORMATEAR RESULTADO DE ADJUNTOS NUEVOS
+// ========================================
+
+function formatearResultadoAdjuntos(resultado, totalRecibidos) {
+  return {
+    // Campos esperados por Apps Script.
+    received: totalRecibidos,
+    stored: resultado.exitosos,
+    failed: resultado.fallidos,
+    errors: resultado.errores,
+
+    // Compatibilidad con los nombres anteriores.
+    total: resultado.total,
+    exitosos: resultado.exitosos,
+    fallidos: resultado.fallidos,
+    errores: resultado.errores
+  };
+}
+
+// ========================================
 // DIAGNOSTICO DE CONFIGURACION
 // ========================================
 
@@ -581,12 +692,38 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
+    // 6.1. Si la actividad ya existe, recuperar adjuntos faltantes.
     if (existing) {
+      const resultadoAdjuntos =
+        await completarAdjuntosExistentes(
+          existing.id,
+          attachments
+        );
+
+      const complete =
+        resultadoAdjuntos.received ===
+          resultadoAdjuntos.stored &&
+        resultadoAdjuntos.failed === 0;
+
+      console.log('====== CORREO DUPLICADO ======');
+      console.log('Actividad existente:', existing.id);
+      console.log('Adjuntos:', resultadoAdjuntos);
+      console.log('Recepción completa:', complete);
+      console.log('==============================');
+
       return res.status(200).json({
         ok: true,
+        complete,
         duplicate: true,
-        message: 'El correo ya había sido procesado',
-        id: existing.id
+
+        message: complete
+          ? 'El correo ya estaba registrado y sus adjuntos están completos'
+          : 'La actividad existe, pero faltan adjuntos por almacenar',
+
+        id: existing.id,
+        activity_id: existing.id,
+
+        attachments: resultadoAdjuntos
       });
     }
 
@@ -706,19 +843,54 @@ router.post('/capturas', async (req, res) => {
       .single();
 
     if (insertError) {
+      // 11.1. Si otro proceso insertó el correo al mismo tiempo,
+      // recuperar la actividad y completar sus adjuntos.
       if (insertError.code === '23505') {
-        const { data: duplicate } = await db
-          .from('activities')
-          .select('id')
-          .eq('source_type', 'outlook')
-          .eq('source_email_id', messageId)
-          .maybeSingle();
+        const { data: duplicate, error: duplicateLookupError } =
+          await db
+            .from('activities')
+            .select('id')
+            .eq('source_type', 'outlook')
+            .eq('source_email_id', messageId)
+            .maybeSingle();
+
+        if (duplicateLookupError) {
+          console.error(
+            'ERROR CONSULTANDO ACTIVIDAD DUPLICADA:',
+            duplicateLookupError
+          );
+
+          return res.status(500).json({
+            ok: false,
+            error: 'No se pudo recuperar la actividad duplicada'
+          });
+        }
 
         if (duplicate) {
+          const resultadoAdjuntos =
+            await completarAdjuntosExistentes(
+              duplicate.id,
+              attachments
+            );
+
+          const complete =
+            resultadoAdjuntos.received ===
+              resultadoAdjuntos.stored &&
+            resultadoAdjuntos.failed === 0;
+
           return res.status(200).json({
             ok: true,
+            complete,
             duplicate: true,
-            id: duplicate.id
+
+            message: complete
+              ? 'La actividad ya estaba registrada y sus adjuntos están completos'
+              : 'La actividad existe, pero faltan adjuntos por almacenar',
+
+            id: duplicate.id,
+            activity_id: duplicate.id,
+
+            attachments: resultadoAdjuntos
           });
         }
       }
@@ -771,9 +943,15 @@ router.post('/capturas', async (req, res) => {
     }
 
     // 14. Preparar respuesta.
-    const tieneErrores =
-      resultadoAdjuntos.fallidos > 0 ||
-      Boolean(historyError);
+    const respuestaAdjuntos = formatearResultadoAdjuntos(
+      resultadoAdjuntos,
+      attachments.length
+    );
+
+    const complete =
+      respuestaAdjuntos.received ===
+        respuestaAdjuntos.stored &&
+      respuestaAdjuntos.failed === 0;
 
     console.log('====== WEBHOOK OUTLOOK ======');
     console.log('Actividad:', created.id);
@@ -787,22 +965,26 @@ router.post('/capturas', async (req, res) => {
     console.log('Prioridad:', priority);
     console.log('Cantidad de modelos:', quantity);
     console.log('Origen cantidad:', quantitySource);
-    console.log('Adjuntos:', resultadoAdjuntos);
+    console.log('Adjuntos:', respuestaAdjuntos);
+    console.log('Historial registrado:', !historyError);
+    console.log('Recepción completa:', complete);
     console.log('=============================');
 
     return res.status(201).json({
       ok: true,
+      complete,
 
-      message: tieneErrores
-        ? 'Actividad registrada con incidencias parciales'
-        : 'Actividad registrada correctamente',
+      message: complete
+        ? 'Actividad registrada correctamente'
+        : 'Actividad registrada con incidencias en los adjuntos',
 
       id: created.id,
+      activity_id: created.id,
 
       activity_type: clasificacion.activity_type,
       catalog_category: clasificacion.catalog_category,
 
-      // Etiquetas operativas detectadas.
+      // Etiquetas operativas.
       operational_tags: operationalTags,
 
       priority,
@@ -827,7 +1009,8 @@ router.post('/capturas', async (req, res) => {
         errores: resultadoExcel.errores
       },
 
-      attachments: resultadoAdjuntos,
+      attachments: respuestaAdjuntos,
+
       history_registered: !historyError
     });
 
