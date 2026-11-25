@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -589,14 +590,6 @@ function aplicarFiltroCategoria(consulta, categoriaFiltro) {
 
   if (categoriaFiltro === 'por_clasificar') {
     const listaExcluidas = CATEGORIAS_CLASIFICADAS.join(',');
-
-    // Incluye:
-    // 1. catalog_category NULL.
-    // 2. Categorías que no pertenecen a las
-    //    categorías principales clasificadas.
-    //
-    // Así también entran los valores históricos
-    // pendientes y las categorías desconocidas.
 
     return consulta.or(
       `catalog_category.is.null,catalog_category.not.in.(${listaExcluidas})`
@@ -1491,6 +1484,20 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
 
 // ========================================
 // CANCELAR ACTIVIDAD (SOLO ADMIN)
+//
+// La función SQL cancelar_actividad se encarga
+// de manera atómica de:
+//
+// 1. Validar al administrador.
+// 2. Comprobar que la actividad exista.
+// 3. Evitar cancelaciones duplicadas.
+// 4. Cerrar todas las asignaciones abiertas.
+// 5. Limpiar el responsable actual.
+// 6. Actualizar el estado y la fecha.
+// 7. Registrar el historial.
+//
+// No se realizan UPDATE ni INSERT directos
+// desde Express para esta operación.
 // ========================================
 
 router.post('/:id/eliminar', requireAdmin, async (req, res) => {
@@ -1507,7 +1514,10 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       );
     }
 
-    const { data, error } = await req.supabase.rpc(
+    const {
+      data,
+      error
+    } = await req.supabase.rpc(
       'cancelar_actividad',
       {
         p_activity_id: activityId,
@@ -1521,8 +1531,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
         error
       );
 
-      // La función SQL controla si la actividad
-      // existe y si ya se encuentra cancelada.
       if (
         error.message?.includes('Actividad no encontrada')
       ) {
@@ -1561,51 +1569,6 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(
       'ERROR INTERNO AL CANCELAR ACTIVIDAD:',
-      err
-    );
-
-    return res.status(500).send(
-      'Error interno al cancelar actividad'
-    );
-  }
-});
-
-    const {
-      error: historyError
-    } = await req.supabase
-      .from('activity_history')
-      .insert({
-        activity_id: activityId,
-        actor_id: req.user.id,
-        action: 'actividad_cancelada',
-        previous_status: anterior.status,
-        new_status: 'cancelada',
-        comments: reason,
-        metadata: {
-          cancellation_reason: reason,
-          title: anterior.title
-        }
-      });
-
-    if (historyError) {
-      console.error(
-        'ERROR REGISTRANDO CANCELACIÓN:',
-        historyError
-      );
-
-      return res.status(500).send(
-        'La actividad fue cancelada, pero no se pudo registrar la acción en el historial. Contacta al administrador del sistema.'
-      );
-    }
-
-    return res.redirect(
-      303,
-      `${baseUrl(req)}/${activityId}`
-    );
-
-  } catch (err) {
-    console.error(
-      'ERROR CANCELAR ACTIVIDAD:',
       err
     );
 
