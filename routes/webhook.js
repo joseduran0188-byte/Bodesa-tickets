@@ -39,7 +39,7 @@ function getSupabaseAdmin() {
 
   if (!url || !key) {
     throw new Error(
-      'Faltan las variables de configuración de Supabase.'
+      'Faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.'
     );
   }
 
@@ -66,86 +66,141 @@ function textoOpcional(value) {
 function validarSecreto(recibido) {
   const esperado = process.env.WEBHOOK_SECRET;
 
-  const recibidoValido = typeof recibido === 'string';
-  const esperadoConfigurado =
-    typeof esperado === 'string' && esperado.length > 0;
-
-  const longitudRecibida = recibidoValido
-    ? Buffer.byteLength(recibido, 'utf8')
-    : 0;
-
-  const longitudEsperada = esperadoConfigurado
-    ? Buffer.byteLength(esperado, 'utf8')
-    : 0;
-
-  if (DIAGNOSTICO_WEBHOOK) {
-    console.log('====== DIAGNOSTICO WEBHOOK ======');
-    console.log('Secreto recibido como texto:', recibidoValido);
-    console.log('Secreto configurado:', esperadoConfigurado);
-    console.log('Longitud recibida:', longitudRecibida);
-    console.log('Longitud configurada:', longitudEsperada);
-    console.log(
-      'Coinciden longitudes:',
-      longitudRecibida === longitudEsperada
-    );
-    console.log('=================================');
-  }
-
-  if (!recibidoValido || !esperadoConfigurado) {
+  if (
+    typeof recibido !== 'string' ||
+    typeof esperado !== 'string' ||
+    !esperado
+  ) {
     return false;
   }
 
   const a = Buffer.from(recibido, 'utf8');
   const b = Buffer.from(esperado, 'utf8');
 
-  if (a.length !== b.length) {
-    return false;
-  }
+  if (a.length !== b.length) return false;
 
   return timingSafeEqual(a, b);
 }
 
 function obtenerFecha(value) {
-  if (!value) {
-    return new Date().toISOString();
-  }
+  if (!value) return new Date().toISOString();
 
   const fecha = new Date(value);
 
-  if (Number.isNaN(fecha.getTime())) {
-    return null;
-  }
+  if (Number.isNaN(fecha.getTime())) return null;
 
   return fecha.toISOString();
 }
 
 function obtenerExtension(nombre) {
-  const extension = String(nombre || '')
-    .split('.')
-    .pop()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+  const partes = String(nombre || '').split('.');
+  const extension = partes.length > 1
+    ? partes.pop().toLowerCase().replace(/[^a-z0-9]/g, '')
+    : '';
 
   return extension || 'bin';
 }
 
-function validarBase64(contenido) {
-  if (
-    typeof contenido !== 'string' ||
-    !contenido.trim()
-  ) {
-    return false;
+function normalizarNombreArchivo(nombre) {
+  return String(nombre || 'archivo')
+    .replace(/[\/\\]/g, '_')
+    .replace(/[\u0000-\u001F]/g, '')
+    .trim()
+    .slice(0, 255) || 'archivo';
+}
+
+/**
+ * Convierte contentBytes a Buffer.
+ *
+ * Acepta:
+ * - Base64 normal.
+ * - Base64 con saltos de línea.
+ * - Base64 URL-safe.
+ * - Base64 sin padding.
+ * - Data URI: data:image/png;base64,...
+ *
+ * No modifica los bytes originales del archivo.
+ */
+function decodificarAdjunto(contenido) {
+  if (typeof contenido !== 'string' || !contenido.trim()) {
+    throw new Error('El contenido Base64 está vacío.');
   }
 
-  const limpio = contenido.replace(/\s/g, '');
+  let base64 = contenido.trim();
 
-  if (limpio.length % 4 !== 0) {
-    return false;
+  // Eliminar encabezado de Data URI.
+  if (/^data:[^,]*;base64,/i.test(base64)) {
+    base64 = base64.substring(base64.indexOf(',') + 1);
   }
 
-  return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-    limpio
-  );
+  // Eliminar espacios y saltos de línea.
+  base64 = base64.replace(/\s/g, '');
+
+  // Convertir Base64 URL-safe a Base64 normal.
+  base64 = base64
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  // Eliminar padding existente y reconstruirlo.
+  base64 = base64.replace(/=+$/, '');
+
+  if (!base64 || !/^[A-Za-z0-9+/]+$/.test(base64)) {
+    throw new Error('El contenido no tiene un formato Base64 válido.');
+  }
+
+  if (base64.length % 4 === 1) {
+    throw new Error('El contenido Base64 está incompleto.');
+  }
+
+  const padding = (4 - (base64.length % 4)) % 4;
+  const base64Completo = base64 + '='.repeat(padding);
+
+  const buffer = Buffer.from(base64Completo, 'base64');
+
+  if (!buffer.length) {
+    throw new Error('El archivo decodificado está vacío.');
+  }
+
+  // Verificar que la conversión no haya producido datos inválidos.
+  const originalNormalizado = base64Completo.replace(/=+$/, '');
+  const convertidoNormalizado = buffer.toString('base64').replace(/=+$/, '');
+
+  if (originalNormalizado !== convertidoNormalizado) {
+    throw new Error('No fue posible verificar la integridad del Base64.');
+  }
+
+  return buffer;
+}
+
+function obtenerMimeType(att, nombre) {
+  const recibido = textoOpcional(att?.contentType);
+
+  if (recibido && /^[\w.+-]+\/[\w.+-]+$/.test(recibido)) {
+    return recibido;
+  }
+
+  const extension = obtenerExtension(nombre);
+
+  const tipos = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
+    pdf: 'application/pdf',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    xls: 'application/vnd.ms-excel',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc: 'application/msword',
+    csv: 'text/csv',
+    txt: 'text/plain',
+    zip: 'application/zip'
+  };
+
+  return tipos[extension] || 'application/octet-stream';
 }
 
 // ========================================
@@ -162,7 +217,7 @@ function normalizarEncabezado(valor = '') {
 }
 
 // ========================================
-// CONTAR MODELOS DE ARCHIVOS EXCEL
+// CONTAR MODELOS DE EXCEL
 // ========================================
 
 function contarModelosExcel(attachments = []) {
@@ -189,18 +244,7 @@ function contarModelosExcel(attachments = []) {
     }
 
     try {
-      if (!validarBase64(att.contentBytes)) {
-        throw new Error('Contenido Base64 inválido');
-      }
-
-      const buffer = Buffer.from(
-        att.contentBytes.replace(/\s/g, ''),
-        'base64'
-      );
-
-      if (!buffer.length) {
-        throw new Error('Archivo vacío');
-      }
+      const buffer = decodificarAdjunto(att.contentBytes);
 
       const workbook = XLSX.read(buffer, {
         type: 'buffer',
@@ -209,10 +253,11 @@ function contarModelosExcel(attachments = []) {
 
       const diagnosticoArchivo = {
         archivo: att.name,
-        hojas: []
+        hojas: [],
+        total_codigos_unicos_archivo: 0
       };
 
-      let codigosArchivo = 0;
+      const codigosArchivo = new Set();
 
       for (const nombreHoja of workbook.SheetNames) {
         const hoja = workbook.Sheets[nombreHoja];
@@ -240,10 +285,11 @@ function contarModelosExcel(attachments = []) {
         for (let i = 0; i < limite; i++) {
           const fila = filas[i] || [];
 
-          const indice = fila.findIndex(celda => {
-            const encabezado = normalizarEncabezado(celda);
-            return encabezadosValidos.includes(encabezado);
-          });
+          const indice = fila.findIndex(celda =>
+            encabezadosValidos.includes(
+              normalizarEncabezado(celda)
+            )
+          );
 
           if (indice !== -1) {
             filaEncabezado = i;
@@ -254,7 +300,7 @@ function contarModelosExcel(attachments = []) {
 
         if (filaEncabezado === -1) {
           resultadoHoja.motivo =
-            'No se encontró una columna de código SAP';
+            'No se encontró una columna de código SAP.';
 
           diagnosticoArchivo.hojas.push(resultadoHoja);
           continue;
@@ -271,13 +317,13 @@ function contarModelosExcel(attachments = []) {
           i < filas.length;
           i++
         ) {
-          const valorOriginal = String(
+          const valor = String(
             filas[i]?.[columnaCodigo] ?? ''
           ).trim();
 
-          if (!valorOriginal) continue;
+          if (!valor) continue;
 
-          const codigo = normalizarEncabezado(valorOriginal);
+          const codigo = normalizarEncabezado(valor);
 
           if (
             !codigo ||
@@ -294,24 +340,23 @@ function contarModelosExcel(attachments = []) {
 
           if (!/\d/.test(codigo)) continue;
 
-          const cantidadAnterior = codigosUnicos.size;
+          const cantidadAnterior = codigosArchivo.size;
 
+          codigosArchivo.add(codigo);
           codigosUnicos.add(codigo);
 
-          if (codigosUnicos.size > cantidadAnterior) {
+          if (codigosArchivo.size > cantidadAnterior) {
             resultadoHoja.codigos_detectados++;
-            codigosArchivo++;
           }
         }
 
         diagnosticoArchivo.hojas.push(resultadoHoja);
       }
 
-      archivosLeidos.push(att.name);
-
       diagnosticoArchivo.total_codigos_unicos_archivo =
-        codigosArchivo;
+        codigosArchivo.size;
 
+      archivosLeidos.push(att.name);
       diagnostico.push(diagnosticoArchivo);
 
     } catch (error) {
@@ -344,7 +389,7 @@ function contarModelosExcel(attachments = []) {
   };
 
   console.log(
-    'DIAGNOSTICO DETALLADO EXCEL:',
+    'DIAGNOSTICO EXCEL:',
     JSON.stringify(resultado, null, 2)
   );
 
@@ -352,7 +397,7 @@ function contarModelosExcel(attachments = []) {
 }
 
 // ========================================
-// COMPROBAR ADJUNTOS EXISTENTES
+// CONSULTAR ADJUNTOS DE UNA ACTIVIDAD
 // ========================================
 
 async function obtenerAdjuntosExistentes(activityId) {
@@ -360,7 +405,7 @@ async function obtenerAdjuntosExistentes(activityId) {
 
   const { data, error } = await db
     .from('activity_attachments')
-    .select('file_name, file_path, file_size, mime_type')
+    .select('id, file_name, file_path, file_size, mime_type')
     .eq('activity_id', activityId);
 
   if (error) {
@@ -373,7 +418,11 @@ async function obtenerAdjuntosExistentes(activityId) {
   return data || [];
 }
 
-async function existeObjetoStorage(filePath) {
+// ========================================
+// COMPROBAR QUE EL OBJETO SEA IDÉNTICO
+// ========================================
+
+async function objetoStorageCoincide(filePath, bufferEsperado) {
   if (!filePath) return false;
 
   const db = getSupabaseAdmin();
@@ -383,17 +432,36 @@ async function existeObjetoStorage(filePath) {
     .download(filePath);
 
   if (error || !data) {
+    console.warn(
+      'No se pudo descargar el objeto para verificarlo:',
+      filePath,
+      error?.message || ''
+    );
+
     return false;
   }
 
-  return true;
+  try {
+    const arrayBuffer = await data.arrayBuffer();
+    const bufferStorage = Buffer.from(arrayBuffer);
+
+    return bufferStorage.equals(bufferEsperado);
+  } catch (errorLectura) {
+    console.error(
+      'ERROR COMPARANDO ARCHIVO:',
+      filePath,
+      errorLectura.message
+    );
+
+    return false;
+  }
 }
 
 // ========================================
-// PROCESAR ARCHIVOS ADJUNTOS
+// PROCESAR Y ALMACENAR ADJUNTOS
 // ========================================
 
-async function procesarAdjuntos(activityId, attachments) {
+async function procesarAdjuntos(activityId, attachments = []) {
   const db = getSupabaseAdmin();
 
   const resultados = {
@@ -405,45 +473,32 @@ async function procesarAdjuntos(activityId, attachments) {
 
   let existentes = await obtenerAdjuntosExistentes(activityId);
 
-  // Cada registro existente solo puede corresponder
-  // a un adjunto de la solicitud actual.
+  // Evita reutilizar el mismo registro para dos adjuntos.
   const registrosUtilizados = new Set();
 
   for (const att of attachments) {
     let storagePath = null;
 
     try {
-      if (
-        !att ||
-        !att.name ||
-        !att.contentBytes
-      ) {
+      if (!att || !att.name || !att.contentBytes) {
         throw new Error(
           'El adjunto no contiene nombre o contenido.'
         );
       }
 
-      if (!validarBase64(att.contentBytes)) {
-        throw new Error(
-          `Contenido Base64 inválido: ${att.name}`
-        );
-      }
+      const buffer = decodificarAdjunto(att.contentBytes);
 
-      const buffer = Buffer.from(
-        att.contentBytes.replace(/\s/g, ''),
-        'base64'
-      );
+      const nombre = normalizarNombreArchivo(att.name);
+      const mimeType = obtenerMimeType(att, nombre);
 
-      if (!buffer.length) {
-        throw new Error(
-          `El archivo está vacío: ${att.name}`
-        );
-      }
+      console.log('PROCESANDO ADJUNTO:', {
+        nombre,
+        bytes: buffer.length,
+        mimeType
+      });
 
-      const nombre = String(att.name).slice(0, 255);
-
-      // Buscar un registro anterior que coincida
-      // por nombre y tamaño, y comprobar el objeto físico.
+      // Buscar un registro con el mismo nombre y tamaño.
+      // No se considera válido hasta comparar los bytes reales.
       let adjuntoEncontrado = false;
 
       for (let i = 0; i < existentes.length; i++) {
@@ -458,17 +513,18 @@ async function procesarAdjuntos(activityId, attachments) {
           continue;
         }
 
-        const existeEnStorage = await existeObjetoStorage(
-          existente.file_path
+        const coincide = await objetoStorageCoincide(
+          existente.file_path,
+          buffer
         );
 
-        if (existeEnStorage) {
+        if (coincide) {
           registrosUtilizados.add(i);
           adjuntoEncontrado = true;
           resultados.exitosos++;
 
           console.log(
-            'ADJUNTO YA DISPONIBLE:',
+            'ADJUNTO VERIFICADO; NO SE DUPLICA:',
             nombre,
             existente.file_path
           );
@@ -477,35 +533,55 @@ async function procesarAdjuntos(activityId, attachments) {
         }
 
         console.warn(
-          'REGISTRO DE ADJUNTO SIN OBJETO EN STORAGE:',
+          'EL ARCHIVO EXISTENTE NO COINCIDE. SE SUBIRÁ DE NUEVO:',
           nombre,
           existente.file_path
         );
       }
 
-      if (adjuntoEncontrado) {
-        continue;
-      }
+      if (adjuntoEncontrado) continue;
 
-      // No existe un adjunto válido: subirlo nuevamente.
+      // Crear una ruta única para el objeto.
       const extension = obtenerExtension(nombre);
 
       storagePath =
         `${activityId}/${randomUUID()}.${extension}`;
 
+      // Subir el Buffer binario original.
       const { error: uploadError } = await db.storage
         .from(BUCKET_ADJUNTOS)
         .upload(storagePath, buffer, {
-          contentType:
-            att.contentType ||
-            'application/octet-stream',
+          contentType: mimeType,
+          cacheControl: '3600',
           upsert: false
         });
 
       if (uploadError) {
-        throw uploadError;
+        throw new Error(
+          'Error subiendo archivo a Storage: ' +
+          uploadError.message
+        );
       }
 
+      // Verificar que Storage conserve exactamente los bytes.
+      const archivoVerificado = await objetoStorageCoincide(
+        storagePath,
+        buffer
+      );
+
+      if (!archivoVerificado) {
+        await db.storage
+          .from(BUCKET_ADJUNTOS)
+          .remove([storagePath]);
+
+        storagePath = null;
+
+        throw new Error(
+          'El archivo subido no coincide con el archivo original.'
+        );
+      }
+
+      // Registrar los metadatos después de verificar Storage.
       const { error: insertError } = await db
         .from('activity_attachments')
         .insert({
@@ -513,7 +589,7 @@ async function procesarAdjuntos(activityId, attachments) {
           file_name: nombre,
           file_path: storagePath,
           file_size: buffer.length,
-          mime_type: att.contentType || null
+          mime_type: mimeType
         });
 
       if (insertError) {
@@ -523,16 +599,31 @@ async function procesarAdjuntos(activityId, attachments) {
 
         storagePath = null;
 
-        throw insertError;
+        throw new Error(
+          'Error registrando metadatos del adjunto: ' +
+          insertError.message
+        );
       }
 
       resultados.exitosos++;
 
-      console.log(
-        'ADJUNTO ALMACENADO:',
+      // Incluir el nuevo registro para evitar duplicados
+      // dentro de la misma solicitud.
+      existentes.push({
+        file_name: nombre,
+        file_path: storagePath,
+        file_size: buffer.length,
+        mime_type: mimeType
+      });
+
+      registrosUtilizados.add(existentes.length - 1);
+
+      console.log('ADJUNTO GUARDADO Y VERIFICADO:', {
         nombre,
-        storagePath
-      );
+        storagePath,
+        bytes: buffer.length,
+        mimeType
+      });
 
     } catch (error) {
       resultados.fallidos++;
@@ -547,6 +638,20 @@ async function procesarAdjuntos(activityId, attachments) {
         att?.name,
         error.message
       );
+
+      // Limpiar un objeto que haya quedado sin registro.
+      if (storagePath) {
+        try {
+          await db.storage
+            .from(BUCKET_ADJUNTOS)
+            .remove([storagePath]);
+        } catch (cleanupError) {
+          console.error(
+            'ERROR LIMPIANDO ARCHIVO:',
+            cleanupError.message
+          );
+        }
+      }
     }
   }
 
@@ -586,8 +691,8 @@ async function asegurarHistorial(
   }
 
   const comments =
-    `Ingresada desde Outlook. Categoría: ${clasificacion.catalog_category}. ` +
-    `Tipo: ${clasificacion.activity_type}. ` +
+    `Ingresada desde Outlook. Categoría: ${clasificacion.catalog_category || 'Sin categoría'}. ` +
+    `Tipo: ${clasificacion.activity_type || 'Sin tipo'}. ` +
     `Etiquetas: ${operationalTags.length > 0 ? operationalTags.join(', ') : 'Ninguna'}. ` +
     `Modelos: ${quantity ?? 'No detectados'}.`;
 
@@ -652,7 +757,7 @@ function responderRecepcion({
       failed,
       errors: attachments.errores,
 
-      // Compatibilidad con respuestas anteriores.
+      // Compatibilidad con Apps Script anterior.
       total: received,
       exitosos: stored,
       fallidos: failed,
@@ -665,7 +770,7 @@ function responderRecepcion({
 }
 
 // ========================================
-// COMPLETAR UNA ACTIVIDAD EXISTENTE
+// COMPLETAR ACTIVIDAD EXISTENTE
 // ========================================
 
 async function completarActividadExistente({
@@ -679,8 +784,6 @@ async function completarActividadExistente({
     attachments
   );
 
-  // No se presupone que el historial exista.
-  // Se comprueba y, si falta, se intenta registrar.
   const db = getSupabaseAdmin();
 
   const { data: activity, error: activityError } = await db
@@ -699,6 +802,7 @@ async function completarActividadExistente({
 
     return res.status(500).json({
       ok: false,
+      complete: false,
       error: 'No se pudo recuperar la actividad existente.'
     });
   }
@@ -733,7 +837,7 @@ async function completarActividadExistente({
 }
 
 // ========================================
-// DIAGNOSTICO DE CONFIGURACION
+// DIAGNÓSTICO DE CONFIGURACIÓN
 // ========================================
 
 router.get('/diagnostico', (req, res) => {
@@ -748,7 +852,7 @@ router.get('/diagnostico', (req, res) => {
       )
     },
     mensaje:
-      'Diagnóstico de variables completado. No se muestran secretos.'
+      'Diagnóstico completado. No se muestran secretos.'
   });
 });
 
@@ -766,7 +870,7 @@ router.post('/capturas', async (req, res) => {
       console.log('Método:', req.method);
       console.log('Content-Type:', req.headers['content-type']);
       console.log(
-        'Body recibido como objeto:',
+        'Se recibió body:',
         typeof payload === 'object' && payload !== null
       );
       console.log(
@@ -780,13 +884,8 @@ router.post('/capturas', async (req, res) => {
     if (!validarSecreto(payload.secret)) {
       return res.status(401).json({
         ok: false,
-        error: 'No autorizado',
-        diagnostico: {
-          secret_recibido: typeof payload.secret === 'string',
-          secret_configurado: Boolean(
-            process.env.WEBHOOK_SECRET
-          )
-        }
+        complete: false,
+        error: 'No autorizado'
       });
     }
 
@@ -829,12 +928,19 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 5. Validar adjuntos.
+    // 5. Validar estructura de adjuntos.
     const attachments = Array.isArray(payload.attachments)
       ? payload.attachments
       : [];
 
-    // 6. Consultar duplicados.
+    if (attachments.length > 100) {
+      return res.status(400).json({
+        ok: false,
+        error: 'La solicitud supera el máximo de 100 adjuntos.'
+      });
+    }
+
+    // 6. Consultar si el correo ya fue registrado.
     const { data: existing, error: duplicateError } = await db
       .from('activities')
       .select('id')
@@ -850,13 +956,12 @@ router.post('/capturas', async (req, res) => {
 
       return res.status(500).json({
         ok: false,
-        error: 'No se pudo verificar el correo'
+        complete: false,
+        error: 'No se pudo verificar el correo.'
       });
     }
 
-    // IMPORTANTE:
-    // Un duplicado no se confirma anticipadamente.
-    // Se comprueban y recuperan sus adjuntos e historial.
+    // 7. Si existe, reparar/verificar adjuntos e historial.
     if (existing) {
       return await completarActividadExistente({
         res,
@@ -866,7 +971,7 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 7. Clasificación automática.
+    // 8. Clasificación automática.
     const datosClasificacion = {
       subject: title,
       body:
@@ -887,7 +992,7 @@ router.post('/capturas', async (req, res) => {
       ? clasificacion.operational_tags
       : [];
 
-    // 8. Detectar prioridad.
+    // 9. Detectar prioridad.
     const prioridadDetectada = detectarPrioridad({
       subject: title,
       body: datosClasificacion.body
@@ -904,7 +1009,7 @@ router.post('/capturas', async (req, res) => {
           ? prioridadRecibida
           : 'media';
 
-    // 9. Contar modelos en Excel.
+    // 10. Contar modelos en Excel.
     const resultadoExcel = contarModelosExcel(attachments);
 
     let quantity = resultadoExcel.quantity;
@@ -937,7 +1042,7 @@ router.post('/capturas', async (req, res) => {
     );
     console.log('================================');
 
-    // 10. Preparar actividad.
+    // 11. Preparar actividad.
     const activity = {
       source_type: 'outlook',
       source_email_id: messageId,
@@ -967,7 +1072,7 @@ router.post('/capturas', async (req, res) => {
       received_at: receivedAt
     };
 
-    // 11. Insertar actividad.
+    // 12. Insertar actividad.
     const { data: created, error: insertError } = await db
       .from('activities')
       .insert(activity)
@@ -975,6 +1080,7 @@ router.post('/capturas', async (req, res) => {
       .single();
 
     if (insertError) {
+      // Puede ocurrir si dos solicitudes llegan al mismo tiempo.
       if (insertError.code === '23505') {
         const { data: duplicate, error: retryLookupError } = await db
           .from('activities')
@@ -991,6 +1097,7 @@ router.post('/capturas', async (req, res) => {
 
           return res.status(500).json({
             ok: false,
+            complete: false,
             error: 'No se pudo recuperar la actividad duplicada.'
           });
         }
@@ -1012,11 +1119,12 @@ router.post('/capturas', async (req, res) => {
 
       return res.status(500).json({
         ok: false,
-        error: 'No se pudo registrar la actividad'
+        complete: false,
+        error: 'No se pudo registrar la actividad.'
       });
     }
 
-    // 12. Registrar historial.
+    // 13. Registrar historial.
     const historyRegistered = await asegurarHistorial(
       created.id,
       clasificacion,
@@ -1024,13 +1132,13 @@ router.post('/capturas', async (req, res) => {
       quantity
     );
 
-    // 13. Procesar adjuntos.
+    // 14. Procesar adjuntos.
     const resultadoAdjuntos = await procesarAdjuntos(
       created.id,
       attachments
     );
 
-    // 14. Diagnóstico y respuesta.
+    // 15. Diagnóstico.
     console.log('====== WEBHOOK OUTLOOK ======');
     console.log('Actividad:', created.id);
     console.log('Correo:', messageId);
@@ -1047,6 +1155,7 @@ router.post('/capturas', async (req, res) => {
     console.log('Historial registrado:', historyRegistered);
     console.log('=============================');
 
+    // 16. Respuesta para Apps Script.
     return responderRecepcion({
       res,
       status: 201,
@@ -1061,10 +1170,13 @@ router.post('/capturas', async (req, res) => {
         operational_tags: operationalTags,
         priority,
         status: 'disponible',
+
         classification_status:
           clasificacion.classification_status,
+
         classification_confidence:
           clasificacion.classification_confidence,
+
         matched_terms: clasificacion.matched_terms,
         quantity,
         quantity_source: quantitySource,
@@ -1072,8 +1184,10 @@ router.post('/capturas', async (req, res) => {
         excel: {
           estructura_encontrada:
             resultadoExcel.estructura_encontrada,
+
           archivos_leidos:
             resultadoExcel.archivos_leidos,
+
           errores: resultadoExcel.errores
         }
       }
@@ -1084,6 +1198,7 @@ router.post('/capturas', async (req, res) => {
 
     return res.status(500).json({
       ok: false,
+      complete: false,
       error: 'Error interno del servidor'
     });
   }
