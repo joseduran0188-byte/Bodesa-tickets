@@ -1081,13 +1081,17 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
     const cambios = {
       title,
 
-      requester_name: textoOpcional(
-        req.body?.requester_name
-      ),
+      // Si el formulario no envía el campo,
+      // conservar el valor que ya existe.
+      requester_name:
+        req.body?.requester_name !== undefined
+          ? textoOpcional(req.body.requester_name)
+          : anterior.requester_name,
 
-      requester_email: textoOpcional(
-        req.body?.requester_email
-      ),
+      requester_email:
+        req.body?.requester_email !== undefined
+          ? textoOpcional(req.body.requester_email)
+          : anterior.requester_email,
 
       activity_type: textoOpcional(
         req.body?.activity_type
@@ -1358,14 +1362,6 @@ router.post('/:id/reactivar', requireAdmin, async (req, res) => {
 
 // ========================================
 // VISUALIZAR ADJUNTO
-//
-// Para imágenes y archivos que el navegador
-// pueda mostrar directamente.
-//
-// La ruta requiere sesión y requireStaff,
-// porque el router tiene middleware global.
-//
-// La URL firmada dura 5 minutos.
 // ========================================
 
 router.get(
@@ -1462,9 +1458,6 @@ router.get(
 
 // ========================================
 // DESCARGAR ADJUNTO
-//
-// Genera una URL firmada temporal y fuerza
-// la descarga con el nombre original.
 // ========================================
 
 router.get(
