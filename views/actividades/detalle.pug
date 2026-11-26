@@ -6,16 +6,25 @@ block content
         .page-header
             div
                 h2= activity.title
-                p Estado:
+                p
+                    | Estado:
                     span(class='badge badge-estado-' + activity.status)= activity.status
 
             a.btn.btn-secondary(href=dashboardUrl) Volver
 
+        //- ========================================
         //- INFORMACIÓN GENERAL
+        //- ========================================
+
         .detail-card
             .detail-item
-        strong Remitente:
-        span= activity.requester_email || '—'
+                strong Remitente:
+                span= activity.requester_email || '—'
+
+            if activity.requester_name
+                .detail-item
+                    strong Nombre del remitente:
+                    span= activity.requester_name
 
             .detail-item
                 strong Tipo:
@@ -27,11 +36,15 @@ block content
 
             .detail-item
                 strong Prioridad:
-                span= activity.priority
+                span= activity.priority || '—'
 
             .detail-item
                 strong Responsable:
-                span= (activity.current_responsible && activity.current_responsible.full_name) || 'Sin asignar'
+                span= (activity.current_responsible && activity.current_responsible.full_name) || activity.current_responsible_name || 'Sin asignar'
+
+            .detail-item
+                strong Fecha de recepción:
+                span= formatDate(activity.received_at)
 
             .detail-item
                 strong Observaciones:
@@ -46,34 +59,81 @@ block content
                     strong Motivo de cancelación:
                     p= activity.cancellation_reason || 'Sin motivo registrado'
 
+        //- ========================================
         //- ARCHIVOS ADJUNTOS
-        if activity.attachments && activity.attachments.length
-            .form-card
-                h3
-                    i.fa-solid.fa-paperclip
-                    |  Archivos adjuntos
+        //- ========================================
 
-                ul
+        .form-card
+            h3
+                i.fa-solid.fa-paperclip
+                |  Archivos adjuntos
+
+            if activity.attachments && activity.attachments.length
+                .activity-attachments
                     each file in activity.attachments
-                        li
-                            a(
-                                href=`/sesion/${sessionToken}/actividades/${activity.id}/adjunto/${file.id}`
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            )
-                                i.fa-solid.fa-paperclip
-                                |  #{file.file_name}
+                        - const esImagen = String(file.mime_type || '').startsWith('image/')
+                        - const urlVista = dashboardUrl + '/' + activity.id + '/adjunto/' + file.id + '/ver'
+                        - const urlDescarga = dashboardUrl + '/' + activity.id + '/adjunto/' + file.id
 
-                            if file.file_size
-                                small.text-muted
-                                    |  (#{Math.round(file.file_size / 1024)} KB)
+                        .attachment-item
+                            if esImagen
+                                a.attachment-preview(
+                                    href=urlVista
+                                    target='_blank'
+                                    rel='noopener noreferrer'
+                                    title='Abrir imagen'
+                                )
+                                    img.attachment-thumbnail(
+                                        src=urlVista
+                                        alt=file.file_name || 'Imagen adjunta'
+                                        loading='lazy'
+                                    )
 
+                            .attachment-information
+                                .attachment-name
+                                    if esImagen
+                                        i.fa-regular.fa-image
+                                    else
+                                        i.fa-solid.fa-file
+
+                                    span= file.file_name || 'Archivo sin nombre'
+
+                                if file.file_size
+                                    small.text-muted
+                                        | #{(Number(file.file_size) / 1024).toFixed(1)} KB
+
+                                .attachment-actions
+                                    if esImagen
+                                        a(
+                                            href=urlVista
+                                            target='_blank'
+                                            rel='noopener noreferrer'
+                                        )
+                                            i.fa-solid.fa-eye
+                                            |  Ver archivo
+
+                                    a(
+                                        href=urlDescarga
+                                        rel='noopener noreferrer'
+                                    )
+                                        i.fa-solid.fa-download
+                                        |  Descargar
+
+            else
+                p.text-muted Esta actividad no tiene archivos adjuntos.
+
+        //- ========================================
         //- ADMINISTRACIÓN
+        //- ========================================
+
         if user.role === 'admin'
             .form-card
                 h3 Administración de actividad
 
+                //- ------------------------------------
                 //- EDICIÓN Y CANCELACIÓN
+                //- ------------------------------------
+
                 if activity.status !== 'cancelada'
                     details
                         summary.btn.btn-primary Editar actividad
@@ -93,12 +153,12 @@ block content
                                 )
 
                             .form-group
-                                label(for='requester_email') Remitente
+                                label(for='requester_email') Correo del remitente
                                 input#requester_email.form-control(
                                     type='email'
                                     name='requester_email'
                                     value=activity.requester_email || ''
-    )
+                                )
 
                             .form-group
                                 label(for='activity_type') Tipo de actividad
@@ -124,10 +184,25 @@ block content
                                     name='priority'
                                     required
                                 )
-                                    option(value='baja' selected=activity.priority === 'baja') Baja
-                                    option(value='media' selected=activity.priority === 'media') Media
-                                    option(value='alta' selected=activity.priority === 'alta') Alta
-                                    option(value='urgente' selected=activity.priority === 'urgente') Urgente
+                                    option(
+                                        value='baja'
+                                        selected=activity.priority === 'baja'
+                                    ) Baja
+
+                                    option(
+                                        value='media'
+                                        selected=activity.priority === 'media'
+                                    ) Media
+
+                                    option(
+                                        value='alta'
+                                        selected=activity.priority === 'alta'
+                                    ) Alta
+
+                                    option(
+                                        value='urgente'
+                                        selected=activity.priority === 'urgente'
+                                    ) Urgente
 
                             .form-group
                                 label(for='observations') Observaciones
@@ -167,7 +242,10 @@ block content
                     p.text-muted
                         | Esta actividad está cancelada. Se conservan sus datos, archivos e historial.
 
+                //- ------------------------------------
                 //- DESVALIDAR ACTIVIDAD
+                //- ------------------------------------
+
                 if activity.status === 'validada'
                     hr
 
@@ -194,7 +272,10 @@ block content
 
                             button.btn.btn-secondary(type='submit') Confirmar desvalidación
 
+                //- ------------------------------------
                 //- REACTIVAR ACTIVIDAD CANCELADA
+                //- ------------------------------------
+
                 if activity.status === 'cancelada'
                     hr
 
@@ -232,7 +313,10 @@ block content
 
                             button.btn.btn-primary(type='submit') Confirmar reactivación
 
+        //- ========================================
         //- ACCIONES OPERATIVAS
+        //- ========================================
+
         .form-card
             h3 Acciones
 
@@ -241,6 +325,16 @@ block content
                     method='POST'
                     action=dashboardUrl + '/' + activity.id + '/tomar'
                 )
+                    .form-group
+                        label(for='responsible_name') Nombre del responsable
+                        input#responsible_name.form-control(
+                            type='text'
+                            name='responsible_name'
+                            maxlength='120'
+                            required
+                            placeholder='Escribe tu nombre'
+                        )
+
                     button.btn.btn-primary(type='submit') Tomar actividad
 
             if activity.status === 'en_proceso' && (activity.current_responsible_id === user.id || user.role === 'admin')
@@ -273,7 +367,10 @@ block content
                 )
                     button.btn.btn-secondary(type='submit') Devolver
 
+        //- ========================================
         //- HISTORIAL
+        //- ========================================
+
         .form-card
             h3
                 i.fa-solid.fa-clock-rotate-left
@@ -314,3 +411,82 @@ block content
                             hr
             else
                 p.text-muted Todavía no hay acciones registradas.
+
+        //- ========================================
+        //- ESTILOS DE ADJUNTOS
+        //- ========================================
+
+        style.
+            .activity-attachments {
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+            }
+
+            .attachment-item {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                flex-wrap: wrap;
+            }
+
+            .attachment-preview {
+                display: block;
+                flex: 0 0 100px;
+                width: 100px;
+                height: 80px;
+                overflow: hidden;
+                border-radius: 6px;
+                background: #f3f3f3;
+            }
+
+            .attachment-thumbnail {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            .attachment-information {
+                flex: 1;
+                min-width: 180px;
+            }
+
+            .attachment-name {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                overflow-wrap: anywhere;
+                font-weight: 600;
+            }
+
+            .attachment-information small {
+                display: block;
+                margin-top: 4px;
+            }
+
+            .attachment-actions {
+                display: flex;
+                gap: 14px;
+                flex-wrap: wrap;
+                margin-top: 8px;
+            }
+
+            .attachment-actions a {
+                text-decoration: none;
+            }
+
+            @media (max-width: 600px) {
+                .attachment-item {
+                    align-items: flex-start;
+                }
+
+                .attachment-preview {
+                    flex-basis: 100%;
+                    width: 100%;
+                    height: 180px;
+                }
+            }
