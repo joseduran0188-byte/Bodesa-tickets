@@ -49,11 +49,65 @@ function getSupabaseAdmin() {
 // CONFIGURACIÓN GENERAL
 // ========================================
 
+const ZONA_HORARIA = 'America/Mexico_City';
+
 function baseUrl(req) {
   return `/sesion/${encodeURIComponent(req.params.sessionToken)}/actividades`;
 }
 
-function paginationUrl(req, page) {
+// ========================================
+// FECHA ACTUAL EN MÉXICO
+// ========================================
+
+function obtenerFechaMexico() {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZONA_HORARIA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const valores = {};
+
+  for (const parte of partes) {
+    if (parte.type !== 'literal') {
+      valores[parte.type] = parte.value;
+    }
+  }
+
+  return `${valores.year}-${valores.month}-${valores.day}`;
+}
+
+// ========================================
+// RANGO DE HOY EN HORARIO DE MÉXICO
+//
+// Ciudad de México utiliza UTC-6 actualmente.
+// El rango se construye desde las 00:00 locales.
+// ========================================
+
+function obtenerRangoHoyMexico() {
+  const fechaMexico = obtenerFechaMexico();
+
+  const inicio = new Date(
+    `${fechaMexico}T06:00:00.000Z`
+  );
+
+  const fin = new Date(
+    inicio.getTime() + 24 * 60 * 60 * 1000
+  );
+
+  return {
+    fechaMexico,
+    inicio: inicio.toISOString(),
+    fin: fin.toISOString()
+  };
+}
+
+// ========================================
+// CONSTRUIR URL CONSERVANDO FILTROS
+// ========================================
+
+function construirUrlPeriodo(req, periodo, page = 1) {
   const params = new URLSearchParams();
 
   const category = String(req.query.category || '').trim();
@@ -62,9 +116,29 @@ function paginationUrl(req, page) {
   if (category) params.set('category', category);
   if (tag) params.set('tag', tag);
 
-  params.set('page', String(page));
+  if (periodo && periodo !== 'todas') {
+    params.set('periodo', periodo);
+  }
 
-  return `${baseUrl(req)}?${params.toString()}`;
+  if (page > 1) {
+    params.set('page', String(page));
+  }
+
+  const query = params.toString();
+
+  return query
+    ? `${baseUrl(req)}?${query}`
+    : baseUrl(req);
+}
+
+function paginationUrl(req, page) {
+  const periodo = String(req.query.periodo || 'todas');
+
+  return construirUrlPeriodo(
+    req,
+    periodo,
+    page
+  );
 }
 
 function renderData(req, extra = {}) {
@@ -92,7 +166,7 @@ function renderData(req, extra = {}) {
       if (!date) return '—';
 
       return new Date(date).toLocaleString('es-MX', {
-        timeZone: 'America/Mexico_City',
+        timeZone: ZONA_HORARIA,
         dateStyle: 'medium',
         timeStyle: 'short'
       });
@@ -454,6 +528,10 @@ function obtenerFiltros(req) {
     req.query.tag || ''
   ).trim().toUpperCase();
 
+  const periodoSolicitado = String(
+    req.query.periodo || 'todas'
+  ).trim().toLowerCase();
+
   const categoriaValida = CATEGORIAS_RESUMEN.some(
     item => item.key === categoriaSolicitada
   );
@@ -462,6 +540,11 @@ function obtenerFiltros(req) {
     item => item.key === etiquetaSolicitada
   );
 
+  const periodoValido = [
+    'hoy',
+    'todas'
+  ].includes(periodoSolicitado);
+
   return {
     categoriaFiltro: categoriaValida
       ? categoriaSolicitada
@@ -469,7 +552,11 @@ function obtenerFiltros(req) {
 
     etiquetaFiltro: etiquetaValida
       ? etiquetaSolicitada
-      : ''
+      : '',
+
+    periodoFiltro: periodoValido
+      ? periodoSolicitado
+      : 'todas'
   };
 }
 
@@ -511,7 +598,8 @@ router.get('/', async (req, res) => {
 
     const {
       categoriaFiltro,
-      etiquetaFiltro
+      etiquetaFiltro,
+      periodoFiltro
     } = obtenerFiltros(req);
 
     const pageParam = String(req.query.page || '1');
@@ -537,17 +625,31 @@ router.get('/', async (req, res) => {
         count: 'exact'
       });
 
+    // Filtro de categoría.
     consulta = aplicarFiltroCategoria(
       consulta,
       categoriaFiltro
     );
 
+    // Filtro de etiqueta.
     if (etiquetaFiltro) {
       consulta = consulta.filter(
         'operational_tags',
         'cs',
         JSON.stringify([etiquetaFiltro])
       );
+    }
+
+    // Filtro de actividades recibidas hoy.
+    // Se utiliza received_at porque representa la recepción del correo.
+    let rangoHoy = null;
+
+    if (periodoFiltro === 'hoy') {
+      rangoHoy = obtenerRangoHoyMexico();
+
+      consulta = consulta
+        .gte('received_at', rangoHoy.inicio)
+        .lt('received_at', rangoHoy.fin);
     }
 
     const {
@@ -617,6 +719,8 @@ router.get('/', async (req, res) => {
       totalActividades
     );
 
+    // El resumen general conserva el comportamiento original:
+    // se calcula sobre todas las actividades, no solo las de hoy.
     let resumenActividades = crearResumenVacio();
 
     try {
@@ -656,6 +760,14 @@ router.get('/', async (req, res) => {
     console.log('Rango:', desdeRegistro, '-', hastaRegistro);
     console.log('Filtro categoría:', categoriaFiltro || 'Todas');
     console.log('Filtro etiqueta:', etiquetaFiltro || 'Todas');
+    console.log('Filtro periodo:', periodoFiltro);
+
+    if (rangoHoy) {
+      console.log('Fecha México:', rangoHoy.fechaMexico);
+      console.log('Inicio UTC:', rangoHoy.inicio);
+      console.log('Fin UTC:', rangoHoy.fin);
+    }
+
     console.log('============================================');
 
     return res.render(
@@ -677,6 +789,13 @@ router.get('/', async (req, res) => {
         paginaSiguiente: paginaActual + 1,
         categoriaFiltro,
         etiquetaFiltro,
+        periodoFiltro,
+        fechaFiltroHoy: rangoHoy?.fechaMexico || null,
+
+        // Enlaces para los botones del dashboard.
+        urlHoy: construirUrlPeriodo(req, 'hoy'),
+        urlTodas: construirUrlPeriodo(req, 'todas'),
+
         categoriasFiltro: CATEGORIAS_RESUMEN,
         etiquetasFiltro: ETIQUETAS_RESUMEN
       })
@@ -979,7 +1098,6 @@ router.get('/:id', async (req, res) => {
         new Date(a.created_at).getTime()
     );
 
-    // Ordenar adjuntos por fecha de registro.
     activity.attachments = (
       activity.attachments || []
     ).sort(
@@ -1077,12 +1195,6 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
         );
       }
     }
-
-    // ========================================
-    // CAMPOS A ACTUALIZAR
-    // Conserva los valores no enviados.
-    // Permite limpiar campos enviados vacíos.
-    // ========================================
 
     const cambios = {
       title,
@@ -1225,7 +1337,7 @@ router.post('/:id/eliminar', requireAdmin, async (req, res) => {
       );
     }
 
-    const { data, error } = await req.supabase.rpc(
+    const { error } = await req.supabase.rpc(
       'cancelar_actividad',
       {
         p_activity_id: activityId,
