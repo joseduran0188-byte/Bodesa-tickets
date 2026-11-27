@@ -5,11 +5,11 @@ mixin paginacion
     if totalActividades > 0
         .pagination-container(style='display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:20px 0; padding:15px; border:1px solid #ddd; border-radius:8px;')
             .pagination-info(style='font-size:14px;')
-                | Mostrando
+                | Mostrando 
                 strong= desdeRegistro
-                |  a
+                |  a 
                 strong= hastaRegistro
-                |  de
+                |  de 
                 strong= totalActividades
                 |  actividades
 
@@ -61,7 +61,7 @@ block content
                 h1 Capturas / Actividades
                 p Bienvenido, #{user.full_name || user.email}
 
-        // DIAGNÓSTICO
+        //- DIAGNÓSTICO
         .debug-dashboard(
             style='background:#fff3cd; color:#664d03; padding:15px; margin:15px 0; border:2px solid #ffca2c; border-radius:8px;'
         )
@@ -69,14 +69,14 @@ block content
 
             p
                 strong Versión:
-                |  DASHBOARD CATEGORÍAS, ETIQUETAS Y RESPONSABLES
+                |  DASHBOARD CATEGORÍAS, ETIQUETAS, RESPONSABLES Y FILTRO POR FECHA
 
             p
                 strong Rol:
                 |  #{user.role}
 
             p
-                strong Registros recibidos:
+                strong Registros recibidos en esta consulta:
                 |  #{activities.length}
 
             p
@@ -88,10 +88,17 @@ block content
                 |  #{totalPaginas}
 
             p
-                strong Total de actividades:
+                strong Total de actividades encontradas:
                 |  #{totalActividades}
 
-        // RESUMEN GENERAL
+            p
+                strong Periodo:
+                if periodoFiltro === 'hoy'
+                    |  Actividades recibidas hoy
+                else
+                    |  Todas las actividades
+
+        //- RESUMEN GENERAL
         if resumenActividades
             .activity-summary(style='margin:25px 0;')
                 h2(style='margin-bottom:15px;') Resumen general
@@ -117,7 +124,7 @@ block content
                         h2(style='margin:8px 0 0; font-size:28px;')
                             = resumenActividades.totalModelos.toLocaleString('es-MX')
 
-                // RESUMEN POR ESTADO
+                //- RESUMEN POR ESTADO
                 h2(style='margin:25px 0 15px;')
                     | Actividades por estado
 
@@ -134,7 +141,7 @@ block content
                             h2(style='margin:8px 0 0; font-size:26px;')
                                 = estado.total.toLocaleString('es-MX')
 
-                // RESUMEN POR CATEGORÍA
+                //- RESUMEN POR CATEGORÍA
                 h2(style='margin:25px 0 15px;')
                     | Actividades por categoría
 
@@ -156,7 +163,7 @@ block content
                                 strong= categoria.modelos.toLocaleString('es-MX')
                                 |  modelos
 
-                // RESUMEN DE ETIQUETAS
+                //- RESUMEN DE ETIQUETAS
                 h2(style='margin:25px 0 15px;')
                     | Actividades por etiqueta operativa
 
@@ -176,7 +183,47 @@ block content
                             p(style='margin:5px 0 0; color:#777; font-size:12px;')
                                 | actividades
 
-        // FILTROS
+        //- FILTRO DE PERIODO
+        .period-filter(
+            style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px; margin:25px 0;'
+        )
+            h2(style='margin-top:0; font-size:19px;')
+                | Consultar actividades
+
+            p(style='color:#666; margin-bottom:15px;')
+                | Selecciona si deseas consultar las actividades recibidas hoy o todo el historial.
+
+            .period-buttons(
+                style='display:flex; flex-wrap:wrap; gap:10px;'
+            )
+                a.action-btn(
+                    href=urlHoy || (dashboardUrl + '?periodo=hoy')
+                    style=[
+                        'text-decoration:none;',
+                        'padding:11px 18px;',
+                        periodoFiltro === 'hoy' ? 'background:#2563eb; color:white; border-color:#2563eb;' : ''
+                    ].join(' ')
+                )
+                    | Ver actividades de hoy
+
+                a.action-btn.action-view(
+                    href=urlTodas || dashboardUrl
+                    style=[
+                        'text-decoration:none;',
+                        'padding:11px 18px;',
+                        periodoFiltro !== 'hoy' ? 'background:#2563eb; color:white; border-color:#2563eb;' : ''
+                    ].join(' ')
+                )
+                    | Ver todas las actividades
+
+            if periodoFiltro === 'hoy'
+                p(
+                    style='margin:15px 0 0; padding:10px; background:#eff6ff; color:#1e40af; border-radius:6px;'
+                )
+                    strong Filtro activo:
+                    |  se muestran las actividades cuya fecha de recepción corresponde al día de hoy en horario de México.
+
+        //- FILTROS DE CATEGORÍA Y ETIQUETA
         .activity-filters(
             style='background:white; border:1px solid #ddd; border-radius:10px; padding:18px; margin:25px 0;'
         )
@@ -188,6 +235,14 @@ block content
                 action=dashboardUrl
                 style='display:flex; flex-wrap:wrap; align-items:end; gap:12px;'
             )
+                //- CONSERVAR EL PERIODO SELECCIONADO
+                if periodoFiltro === 'hoy'
+                    input(
+                        type='hidden'
+                        name='periodo'
+                        value='hoy'
+                    )
+
                 .filter-field(style='flex:1; min-width:220px;')
                     label(for='category-filter')
                         strong Categoría
@@ -226,11 +281,11 @@ block content
                 ) Filtrar
 
                 a.action-btn.action-view(
-                    href=dashboardUrl
+                    href=(periodoFiltro === 'hoy' ? (urlHoy || (dashboardUrl + '?periodo=hoy')) : dashboardUrl)
                     style='text-decoration:none; padding:10px 18px;'
                 ) Limpiar filtros
 
-        // TABLA DE ACTIVIDADES
+        //- TABLA DE ACTIVIDADES
         if activities && activities.length
             +paginacion
 
@@ -276,13 +331,13 @@ block content
 
                                 td
                                     span(class='badge badge-' + (act.priority === 'urgente' ? 'alta' : act.priority))
-                                        = act.priority
+                                        = act.priority || '—'
 
                                 td
                                     span(class='badge badge-estado-' + act.status)
-                                        = act.status
+                                        = act.status || '—'
 
-                                // RESPONSABLE CAPTURADO
+                                //- RESPONSABLE ACTUAL
                                 td
                                     if act.current_responsible_name
                                         strong= act.current_responsible_name
@@ -301,7 +356,7 @@ block content
                                             href=dashboardUrl + '/' + act.id + '#administracion'
                                         ) Editar
 
-                                    // FORMULARIO PARA TOMAR ACTIVIDAD
+                                    //- TOMAR ACTIVIDAD
                                     if act.status === 'disponible' || act.status === 'devuelta'
                                         form(
                                             method='POST'
@@ -323,6 +378,7 @@ block content
                                                 style='width:100%;'
                                             ) Tomar actividad
 
+                                    //- TERMINAR O LIBERAR
                                     if act.status === 'en_proceso' && (act.current_responsible_id === user.id || user.role === 'admin')
                                         form(
                                             method='POST'
@@ -338,6 +394,7 @@ block content
                                         )
                                             button.action-btn(type='submit') Liberar
 
+                                    //- VALIDAR O DEVOLVER
                                     if act.status === 'pendiente_validacion' && user.role === 'admin'
                                         form(
                                             method='POST'
@@ -353,11 +410,13 @@ block content
                                         )
                                             button.action-btn(type='submit') Devolver
 
+                                    //- DESVALIDAR
                                     if act.status === 'validada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
                                         ) Desvalidar
 
+                                    //- REACTIVAR
                                     if act.status === 'cancelada' && user.role === 'admin'
                                         a.action-btn.action-view(
                                             href=dashboardUrl + '/' + act.id
@@ -369,10 +428,21 @@ block content
             .empty-state
                 h3 No hay actividades
 
-                if categoriaFiltro || etiquetaFiltro
+                if periodoFiltro === 'hoy'
+                    p No se encontraron actividades recibidas hoy con los filtros seleccionados.
+
+                    a.action-btn.action-view(
+                        href=urlTodas || dashboardUrl
+                    )
+                        | Consultar todas las actividades
+
+                else if categoriaFiltro || etiquetaFiltro
                     p No se encontraron actividades con los filtros seleccionados.
 
-                    a.action-btn.action-view(href=dashboardUrl)
+                    a.action-btn.action-view(
+                        href=dashboardUrl
+                    )
                         | Limpiar filtros
+
                 else
                     p Las capturas aparecerán aquí cuando se registren.
