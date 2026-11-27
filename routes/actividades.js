@@ -1078,11 +1078,15 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
       }
     }
 
+    // ========================================
+    // CAMPOS A ACTUALIZAR
+    // Conserva los valores no enviados.
+    // Permite limpiar campos enviados vacíos.
+    // ========================================
+
     const cambios = {
       title,
 
-      // Si el formulario no envía el campo,
-      // conservar el valor que ya existe.
       requester_name:
         req.body?.requester_name !== undefined
           ? textoOpcional(req.body.requester_name)
@@ -1093,16 +1097,22 @@ router.post('/:id/editar', requireAdmin, async (req, res) => {
           ? textoOpcional(req.body.requester_email)
           : anterior.requester_email,
 
-      activity_type: textoOpcional(
-        req.body?.activity_type
-      ),
+      activity_type:
+        req.body?.activity_type !== undefined
+          ? textoOpcional(req.body.activity_type)
+          : anterior.activity_type,
 
-      quantity,
+      quantity:
+        req.body?.quantity !== undefined
+          ? quantity
+          : anterior.quantity,
+
       priority,
 
-      observations: textoOpcional(
-        req.body?.observations
-      ),
+      observations:
+        req.body?.observations !== undefined
+          ? textoOpcional(req.body.observations)
+          : anterior.observations,
 
       updated_at: new Date().toISOString()
     };

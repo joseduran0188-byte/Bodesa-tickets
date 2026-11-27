@@ -25,6 +25,9 @@ const PRIORIDADES_VALIDAS = [
   'urgente'
 ];
 
+const MAX_ADJUNTOS = 100;
+const MAX_ADJUNTO_BYTES = 3 * 1024 * 1024;
+
 let supabaseAdmin = null;
 
 // ========================================
@@ -55,7 +58,7 @@ function getSupabaseAdmin() {
 }
 
 // ========================================
-// UTILIDADES
+// UTILIDADES GENERALES
 // ========================================
 
 function textoOpcional(value) {
@@ -87,13 +90,16 @@ function obtenerFecha(value) {
 
   const fecha = new Date(value);
 
-  if (Number.isNaN(fecha.getTime())) return null;
+  if (Number.isNaN(fecha.getTime())) {
+    return null;
+  }
 
   return fecha.toISOString();
 }
 
 function obtenerExtension(nombre) {
   const partes = String(nombre || '').split('.');
+
   const extension = partes.length > 1
     ? partes.pop().toLowerCase().replace(/[^a-z0-9]/g, '')
     : '';
@@ -109,74 +115,254 @@ function normalizarNombreArchivo(nombre) {
     .slice(0, 255) || 'archivo';
 }
 
-/**
- * Convierte contentBytes a Buffer.
- *
- * Acepta:
- * - Base64 normal.
- * - Base64 con saltos de línea.
- * - Base64 URL-safe.
- * - Base64 sin padding.
- * - Data URI: data:image/png;base64,...
- *
- * No modifica los bytes originales del archivo.
- */
+// ========================================
+// OBTENER IDENTIFICADOR ÚNICO DEL MENSAJE
+// ========================================
+
+function obtenerIdentificadorMensaje(payload) {
+  /*
+   * Prioridad:
+   *
+   * 1. gmail_message_id:
+   *    Identifica el mensaje individual en Gmail.
+   *
+   * 2. message_id:
+   *    Compatibilidad con versiones anteriores.
+   *
+   * 3. original_message_id:
+   *    Identificador original de Outlook.
+   *
+   * No usar thread_id como identificador principal:
+   * una conversación puede contener varios correos.
+   */
+
+  return textoOpcional(
+    payload.gmail_message_id ||
+    payload.message_id ||
+    payload.original_message_id ||
+    payload.originalMessageId
+  );
+}
+
+// ========================================
+// NORMALIZAR ADJUNTOS
+// ========================================
+
+function normalizarAdjunto(att) {
+  if (!att || typeof att !== 'object') {
+    return null;
+  }
+
+  const name =
+    att.name ??
+    att.Name ??
+    att.filename ??
+    att.fileName ??
+    att.file_name;
+
+  const contentBytes =
+    att.contentBytes ??
+    att.ContentBytes ??
+    att.content ??
+    att.data;
+
+  const contentType =
+    att.contentType ??
+    att.ContentType ??
+    att.mimeType ??
+    att.mime_type ??
+    att.type ??
+    null;
+
+  const isInline =
+    att.isInline === true ||
+    att.IsInline === true ||
+    att.is_inline === true;
+
+  return {
+    name: textoOpcional(name),
+
+    contentBytes:
+      typeof contentBytes === 'string'
+        ? contentBytes
+        : null,
+
+    contentType: textoOpcional(contentType),
+
+    isInline,
+
+    contentId: textoOpcional(
+      att.contentId ??
+      att.ContentId ??
+      att.content_id
+    )
+  };
+}
+
+// ========================================
+// DECODIFICAR BASE64
+// ========================================
+
 function decodificarAdjunto(contenido) {
-  if (typeof contenido !== 'string' || !contenido.trim()) {
-    throw new Error('El contenido Base64 está vacío.');
+  if (
+    typeof contenido !== 'string' ||
+    !contenido.trim()
+  ) {
+    throw new Error(
+      'El contenido Base64 está vacío.'
+    );
   }
 
   let base64 = contenido.trim();
 
-  // Eliminar encabezado de Data URI.
   if (/^data:[^,]*;base64,/i.test(base64)) {
-    base64 = base64.substring(base64.indexOf(',') + 1);
+    base64 = base64.substring(
+      base64.indexOf(',') + 1
+    );
   }
 
-  // Eliminar espacios y saltos de línea.
   base64 = base64.replace(/\s/g, '');
 
-  // Convertir Base64 URL-safe a Base64 normal.
   base64 = base64
     .replace(/-/g, '+')
     .replace(/_/g, '/');
 
-  // Eliminar padding existente y reconstruirlo.
   base64 = base64.replace(/=+$/, '');
 
-  if (!base64 || !/^[A-Za-z0-9+/]+$/.test(base64)) {
-    throw new Error('El contenido no tiene un formato Base64 válido.');
+  if (
+    !base64 ||
+    !/^[A-Za-z0-9+/]+$/.test(base64)
+  ) {
+    throw new Error(
+      'El contenido no tiene un formato Base64 válido.'
+    );
   }
 
   if (base64.length % 4 === 1) {
-    throw new Error('El contenido Base64 está incompleto.');
+    throw new Error(
+      'El contenido Base64 está incompleto.'
+    );
   }
 
-  const padding = (4 - (base64.length % 4)) % 4;
-  const base64Completo = base64 + '='.repeat(padding);
+  const padding =
+    (4 - (base64.length % 4)) % 4;
 
-  const buffer = Buffer.from(base64Completo, 'base64');
+  const base64Completo =
+    base64 + '='.repeat(padding);
+
+  const buffer = Buffer.from(
+    base64Completo,
+    'base64'
+  );
 
   if (!buffer.length) {
-    throw new Error('El archivo decodificado está vacío.');
+    throw new Error(
+      'El archivo decodificado está vacío.'
+    );
   }
 
-  // Verificar que la conversión no haya producido datos inválidos.
-  const originalNormalizado = base64Completo.replace(/=+$/, '');
-  const convertidoNormalizado = buffer.toString('base64').replace(/=+$/, '');
+  const original = base64Completo
+    .replace(/=+$/, '');
 
-  if (originalNormalizado !== convertidoNormalizado) {
-    throw new Error('No fue posible verificar la integridad del Base64.');
+  const convertido = buffer
+    .toString('base64')
+    .replace(/=+$/, '');
+
+  if (original !== convertido) {
+    throw new Error(
+      'No fue posible verificar la integridad del Base64.'
+    );
+  }
+
+  if (buffer.length > MAX_ADJUNTO_BYTES) {
+    throw new Error(
+      'El archivo supera el límite permitido de 3 MB.'
+    );
   }
 
   return buffer;
 }
 
-function obtenerMimeType(att, nombre) {
-  const recibido = textoOpcional(att?.contentType);
+// ========================================
+// DETECTAR MIME POR CONTENIDO REAL
+// ========================================
 
-  if (recibido && /^[\w.+-]+\/[\w.+-]+$/.test(recibido)) {
-    return recibido;
+function detectarMimePorFirma(buffer) {
+  if (
+    !Buffer.isBuffer(buffer) ||
+    buffer.length < 4
+  ) {
+    return null;
+  }
+
+  // JPEG
+  if (
+    buffer[0] === 0xFF &&
+    buffer[1] === 0xD8 &&
+    buffer[2] === 0xFF
+  ) {
+    return 'image/jpeg';
+  }
+
+  // PNG
+  if (
+    buffer.subarray(0, 8).equals(
+      Buffer.from([
+        0x89, 0x50, 0x4E, 0x47,
+        0x0D, 0x0A, 0x1A, 0x0A
+      ])
+    )
+  ) {
+    return 'image/png';
+  }
+
+  // GIF
+  const gif = buffer
+    .subarray(0, 6)
+    .toString('ascii');
+
+  if (gif === 'GIF87a' || gif === 'GIF89a') {
+    return 'image/gif';
+  }
+
+  // WEBP
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  // PDF
+  if (
+    buffer.subarray(0, 5).toString('ascii') === '%PDF-'
+  ) {
+    return 'application/pdf';
+  }
+
+  return null;
+}
+
+// ========================================
+// OBTENER MIME TYPE
+// ========================================
+
+function obtenerMimeType(att, nombre, buffer) {
+  const detectado = detectarMimePorFirma(buffer);
+
+  if (detectado) {
+    return detectado;
+  }
+
+  const recibido = textoOpcional(
+    att?.contentType
+  );
+
+  if (
+    recibido &&
+    /^[\w.+-]+\/[\w.+-]+$/.test(recibido)
+  ) {
+    return recibido.toLowerCase();
   }
 
   const extension = obtenerExtension(nombre);
@@ -189,18 +375,27 @@ function obtenerMimeType(att, nombre) {
     webp: 'image/webp',
     bmp: 'image/bmp',
     svg: 'image/svg+xml',
+    avif: 'image/avif',
+
     pdf: 'application/pdf',
+
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
     xls: 'application/vnd.ms-excel',
+
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     doc: 'application/msword',
+
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt: 'application/vnd.ms-powerpoint',
+
     csv: 'text/csv',
     txt: 'text/plain',
     zip: 'application/zip'
   };
 
-  return tipos[extension] || 'application/octet-stream';
+  return tipos[extension] ||
+    'application/octet-stream';
 }
 
 // ========================================
@@ -234,8 +429,12 @@ function contarModelosExcel(attachments = []) {
     'CODIGOPRODUCTO'
   ];
 
-  for (const att of attachments) {
-    if (!att?.name || !att?.contentBytes) continue;
+  for (const original of attachments) {
+    const att = normalizarAdjunto(original);
+
+    if (!att?.name || !att.contentBytes) {
+      continue;
+    }
 
     const extension = obtenerExtension(att.name);
 
@@ -244,7 +443,9 @@ function contarModelosExcel(attachments = []) {
     }
 
     try {
-      const buffer = decodificarAdjunto(att.contentBytes);
+      const buffer = decodificarAdjunto(
+        att.contentBytes
+      );
 
       const workbook = XLSX.read(buffer, {
         type: 'buffer',
@@ -262,12 +463,15 @@ function contarModelosExcel(attachments = []) {
       for (const nombreHoja of workbook.SheetNames) {
         const hoja = workbook.Sheets[nombreHoja];
 
-        const filas = XLSX.utils.sheet_to_json(hoja, {
-          header: 1,
-          defval: '',
-          raw: false,
-          blankrows: false
-        });
+        const filas = XLSX.utils.sheet_to_json(
+          hoja,
+          {
+            header: 1,
+            defval: '',
+            raw: false,
+            blankrows: false
+          }
+        );
 
         const resultadoHoja = {
           nombre: nombreHoja,
@@ -277,7 +481,10 @@ function contarModelosExcel(attachments = []) {
           codigos_detectados: 0
         };
 
-        const limite = Math.min(filas.length, 30);
+        const limite = Math.min(
+          filas.length,
+          30
+        );
 
         let filaEncabezado = -1;
         let columnaCodigo = -1;
@@ -302,15 +509,21 @@ function contarModelosExcel(attachments = []) {
           resultadoHoja.motivo =
             'No se encontró una columna de código SAP.';
 
-          diagnosticoArchivo.hojas.push(resultadoHoja);
+          diagnosticoArchivo.hojas.push(
+            resultadoHoja
+          );
+
           continue;
         }
 
         estructuraEncontrada = true;
 
         resultadoHoja.encabezado_encontrado = true;
-        resultadoHoja.fila_encabezado = filaEncabezado + 1;
-        resultadoHoja.columna_codigo = columnaCodigo + 1;
+        resultadoHoja.fila_encabezado =
+          filaEncabezado + 1;
+
+        resultadoHoja.columna_codigo =
+          columnaCodigo + 1;
 
         for (
           let i = filaEncabezado + 1;
@@ -340,17 +553,22 @@ function contarModelosExcel(attachments = []) {
 
           if (!/\d/.test(codigo)) continue;
 
-          const cantidadAnterior = codigosArchivo.size;
+          const cantidadAnterior =
+            codigosArchivo.size;
 
           codigosArchivo.add(codigo);
           codigosUnicos.add(codigo);
 
-          if (codigosArchivo.size > cantidadAnterior) {
+          if (
+            codigosArchivo.size > cantidadAnterior
+          ) {
             resultadoHoja.codigos_detectados++;
           }
         }
 
-        diagnosticoArchivo.hojas.push(resultadoHoja);
+        diagnosticoArchivo.hojas.push(
+          resultadoHoja
+        );
       }
 
       diagnosticoArchivo.total_codigos_unicos_archivo =
@@ -373,7 +591,7 @@ function contarModelosExcel(attachments = []) {
     }
   }
 
-  const resultado = {
+  return {
     quantity: estructuraEncontrada
       ? codigosUnicos.size
       : null,
@@ -387,17 +605,10 @@ function contarModelosExcel(attachments = []) {
     errores,
     diagnostico
   };
-
-  console.log(
-    'DIAGNOSTICO EXCEL:',
-    JSON.stringify(resultado, null, 2)
-  );
-
-  return resultado;
 }
 
 // ========================================
-// CONSULTAR ADJUNTOS DE UNA ACTIVIDAD
+// CONSULTAR ADJUNTOS EXISTENTES
 // ========================================
 
 async function obtenerAdjuntosExistentes(activityId) {
@@ -405,7 +616,9 @@ async function obtenerAdjuntosExistentes(activityId) {
 
   const { data, error } = await db
     .from('activity_attachments')
-    .select('id, file_name, file_path, file_size, mime_type')
+    .select(
+      'id, file_name, file_path, file_size, mime_type'
+    )
     .eq('activity_id', activityId);
 
   if (error) {
@@ -419,10 +632,13 @@ async function obtenerAdjuntosExistentes(activityId) {
 }
 
 // ========================================
-// COMPROBAR QUE EL OBJETO SEA IDÉNTICO
+// COMPARAR ARCHIVO CON STORAGE
 // ========================================
 
-async function objetoStorageCoincide(filePath, bufferEsperado) {
+async function objetoStorageCoincide(
+  filePath,
+  bufferEsperado
+) {
   if (!filePath) return false;
 
   const db = getSupabaseAdmin();
@@ -432,20 +648,18 @@ async function objetoStorageCoincide(filePath, bufferEsperado) {
     .download(filePath);
 
   if (error || !data) {
-    console.warn(
-      'No se pudo descargar el objeto para verificarlo:',
-      filePath,
-      error?.message || ''
-    );
-
     return false;
   }
 
   try {
     const arrayBuffer = await data.arrayBuffer();
-    const bufferStorage = Buffer.from(arrayBuffer);
+
+    const bufferStorage = Buffer.from(
+      arrayBuffer
+    );
 
     return bufferStorage.equals(bufferEsperado);
+
   } catch (errorLectura) {
     console.error(
       'ERROR COMPARANDO ARCHIVO:',
@@ -461,7 +675,10 @@ async function objetoStorageCoincide(filePath, bufferEsperado) {
 // PROCESAR Y ALMACENAR ADJUNTOS
 // ========================================
 
-async function procesarAdjuntos(activityId, attachments = []) {
+async function procesarAdjuntos(
+  activityId,
+  attachments = []
+) {
   const db = getSupabaseAdmin();
 
   const resultados = {
@@ -471,38 +688,65 @@ async function procesarAdjuntos(activityId, attachments = []) {
     errores: []
   };
 
-  let existentes = await obtenerAdjuntosExistentes(activityId);
+  let existentes = await obtenerAdjuntosExistentes(
+    activityId
+  );
 
-  // Evita reutilizar el mismo registro para dos adjuntos.
   const registrosUtilizados = new Set();
 
-  for (const att of attachments) {
+  for (const original of attachments) {
     let storagePath = null;
 
+    const att = normalizarAdjunto(original);
+
     try {
-      if (!att || !att.name || !att.contentBytes) {
+      if (
+        !att ||
+        !att.name ||
+        !att.contentBytes ||
+        !att.contentBytes.trim()
+      ) {
         throw new Error(
-          'El adjunto no contiene nombre o contenido.'
+          'El adjunto no contiene nombre o contenido Base64 válido.'
         );
       }
 
-      const buffer = decodificarAdjunto(att.contentBytes);
+      const nombre = normalizarNombreArchivo(
+        att.name
+      );
 
-      const nombre = normalizarNombreArchivo(att.name);
-      const mimeType = obtenerMimeType(att, nombre);
+      const buffer = decodificarAdjunto(
+        att.contentBytes
+      );
+
+      const mimeType = obtenerMimeType(
+        att,
+        nombre,
+        buffer
+      );
 
       console.log('PROCESANDO ADJUNTO:', {
         nombre,
         bytes: buffer.length,
-        mimeType
+        mimeType,
+        isInline: att.isInline,
+        contentId: att.contentId
       });
 
-      // Buscar un registro con el mismo nombre y tamaño.
-      // No se considera válido hasta comparar los bytes reales.
+      // ========================================
+      // COMPROBAR SI YA ESTÁ ALMACENADO
+      // ========================================
+
       let adjuntoEncontrado = false;
 
-      for (let i = 0; i < existentes.length; i++) {
-        if (registrosUtilizados.has(i)) continue;
+      for (
+        let i = 0;
+        i < existentes.length;
+        i++
+      ) {
+        if (registrosUtilizados.has(i)) {
+          continue;
+        }
 
         const existente = existentes[i];
 
@@ -521,33 +765,35 @@ async function procesarAdjuntos(activityId, attachments = []) {
         if (coincide) {
           registrosUtilizados.add(i);
           adjuntoEncontrado = true;
+
           resultados.exitosos++;
 
           console.log(
-            'ADJUNTO VERIFICADO; NO SE DUPLICA:',
-            nombre,
-            existente.file_path
+            'ADJUNTO YA ALMACENADO Y VERIFICADO:',
+            nombre
           );
 
           break;
         }
-
-        console.warn(
-          'EL ARCHIVO EXISTENTE NO COINCIDE. SE SUBIRÁ DE NUEVO:',
-          nombre,
-          existente.file_path
-        );
       }
 
-      if (adjuntoEncontrado) continue;
+      if (adjuntoEncontrado) {
+        continue;
+      }
 
-      // Crear una ruta única para el objeto.
+      // ========================================
+      // CREAR RUTA ÚNICA
+      // ========================================
+
       const extension = obtenerExtension(nombre);
 
       storagePath =
         `${activityId}/${randomUUID()}.${extension}`;
 
-      // Subir el Buffer binario original.
+      // ========================================
+      // SUBIR ARCHIVO BINARIO
+      // ========================================
+
       const { error: uploadError } = await db.storage
         .from(BUCKET_ADJUNTOS)
         .upload(storagePath, buffer, {
@@ -563,13 +809,16 @@ async function procesarAdjuntos(activityId, attachments = []) {
         );
       }
 
-      // Verificar que Storage conserve exactamente los bytes.
-      const archivoVerificado = await objetoStorageCoincide(
+      // ========================================
+      // VERIFICAR ARCHIVO ALMACENADO
+      // ========================================
+
+      const verificado = await objetoStorageCoincide(
         storagePath,
         buffer
       );
 
-      if (!archivoVerificado) {
+      if (!verificado) {
         await db.storage
           .from(BUCKET_ADJUNTOS)
           .remove([storagePath]);
@@ -577,12 +826,18 @@ async function procesarAdjuntos(activityId, attachments = []) {
         storagePath = null;
 
         throw new Error(
-          'El archivo subido no coincide con el archivo original.'
+          'El archivo almacenado no coincide con el original.'
         );
       }
 
-      // Registrar los metadatos después de verificar Storage.
-      const { error: insertError } = await db
+      // ========================================
+      // REGISTRAR METADATOS
+      // ========================================
+
+      const {
+        data: metadata,
+        error: insertError
+      } = await db
         .from('activity_attachments')
         .insert({
           activity_id: activityId,
@@ -590,7 +845,11 @@ async function procesarAdjuntos(activityId, attachments = []) {
           file_path: storagePath,
           file_size: buffer.length,
           mime_type: mimeType
-        });
+        })
+        .select(
+          'id, file_name, file_path, file_size, mime_type'
+        )
+        .single();
 
       if (insertError) {
         await db.storage
@@ -600,29 +859,25 @@ async function procesarAdjuntos(activityId, attachments = []) {
         storagePath = null;
 
         throw new Error(
-          'Error registrando metadatos del adjunto: ' +
+          'Error registrando metadatos: ' +
           insertError.message
         );
       }
 
       resultados.exitosos++;
 
-      // Incluir el nuevo registro para evitar duplicados
-      // dentro de la misma solicitud.
-      existentes.push({
-        file_name: nombre,
-        file_path: storagePath,
-        file_size: buffer.length,
-        mime_type: mimeType
-      });
+      existentes.push(metadata);
 
-      registrosUtilizados.add(existentes.length - 1);
+      registrosUtilizados.add(
+        existentes.length - 1
+      );
 
-      console.log('ADJUNTO GUARDADO Y VERIFICADO:', {
+      console.log('ADJUNTO GUARDADO:', {
         nombre,
         storagePath,
         bytes: buffer.length,
-        mimeType
+        mimeType,
+        isInline: att.isInline
       });
 
     } catch (error) {
@@ -639,12 +894,12 @@ async function procesarAdjuntos(activityId, attachments = []) {
         error.message
       );
 
-      // Limpiar un objeto que haya quedado sin registro.
       if (storagePath) {
         try {
           await db.storage
             .from(BUCKET_ADJUNTOS)
             .remove([storagePath]);
+
         } catch (cleanupError) {
           console.error(
             'ERROR LIMPIANDO ARCHIVO:',
@@ -670,7 +925,10 @@ async function asegurarHistorial(
 ) {
   const db = getSupabaseAdmin();
 
-  const { data: existente, error: consultaError } = await db
+  const {
+    data: existente,
+    error: consultaError
+  } = await db
     .from('activity_history')
     .select('activity_id')
     .eq('activity_id', activityId)
@@ -693,10 +951,12 @@ async function asegurarHistorial(
   const comments =
     `Ingresada desde Outlook. Categoría: ${clasificacion.catalog_category || 'Sin categoría'}. ` +
     `Tipo: ${clasificacion.activity_type || 'Sin tipo'}. ` +
-    `Etiquetas: ${operationalTags.length > 0 ? operationalTags.join(', ') : 'Ninguna'}. ` +
+    `Etiquetas: ${operationalTags.length ? operationalTags.join(', ') : 'Ninguna'}. ` +
     `Modelos: ${quantity ?? 'No detectados'}.`;
 
-  const { error: historyError } = await db
+  const {
+    error: historyError
+  } = await db
     .from('activity_history')
     .insert({
       activity_id: activityId,
@@ -737,14 +997,17 @@ function responderRecepcion({
 
   const complete =
     historyRegistered === true &&
+    received > 0 &&
     received === stored &&
     failed === 0;
 
   return res.status(status).json({
     ok: true,
     complete,
+
     activity_id: activityId,
     id: activityId,
+
     duplicate,
 
     message: complete
@@ -757,7 +1020,7 @@ function responderRecepcion({
       failed,
       errors: attachments.errores,
 
-      // Compatibilidad con Apps Script anterior.
+      // Compatibilidad con Apps Script.
       total: received,
       exitosos: stored,
       fallidos: failed,
@@ -765,6 +1028,7 @@ function responderRecepcion({
     },
 
     history_registered: historyRegistered,
+
     ...extra
   });
 }
@@ -786,11 +1050,18 @@ async function completarActividadExistente({
 
   const db = getSupabaseAdmin();
 
-  const { data: activity, error: activityError } = await db
+  const {
+    data: activity,
+    error: activityError
+  } = await db
     .from('activities')
-    .select(
-      'id, activity_type, catalog_category, operational_tags, quantity'
-    )
+    .select(`
+      id,
+      activity_type,
+      catalog_category,
+      operational_tags,
+      quantity
+    `)
     .eq('id', activityId)
     .maybeSingle();
 
@@ -837,20 +1108,30 @@ async function completarActividadExistente({
 }
 
 // ========================================
-// DIAGNÓSTICO DE CONFIGURACIÓN
+// DIAGNÓSTICO
 // ========================================
 
 router.get('/diagnostico', (req, res) => {
   return res.status(200).json({
     ok: true,
     webhook: 'activo',
+
     configuracion: {
-      webhook_secret: Boolean(process.env.WEBHOOK_SECRET),
-      supabase_url: Boolean(process.env.SUPABASE_URL),
+      webhook_secret: Boolean(
+        process.env.WEBHOOK_SECRET
+      ),
+
+      supabase_url: Boolean(
+        process.env.SUPABASE_URL
+      ),
+
       supabase_service_role_key: Boolean(
         process.env.SUPABASE_SERVICE_ROLE_KEY
       )
     },
+
+    bucket: BUCKET_ADJUNTOS,
+
     mensaje:
       'Diagnóstico completado. No se muestran secretos.'
   });
@@ -868,19 +1149,45 @@ router.post('/capturas', async (req, res) => {
     if (DIAGNOSTICO_WEBHOOK) {
       console.log('====== SOLICITUD RECIBIDA ======');
       console.log('Método:', req.method);
-      console.log('Content-Type:', req.headers['content-type']);
       console.log(
-        'Se recibió body:',
-        typeof payload === 'object' && payload !== null
+        'Content-Type:',
+        req.headers['content-type']
       );
+
       console.log(
-        'Se recibió propiedad secret:',
-        Object.prototype.hasOwnProperty.call(payload, 'secret')
+        'Número de adjuntos recibidos:',
+        Array.isArray(payload.attachments)
+          ? payload.attachments.length
+          : 0
       );
+
+      console.log(
+        'Identificador Gmail recibido:',
+        Boolean(payload.gmail_message_id)
+      );
+
+      console.log(
+        'Identificador alternativo recibido:',
+        Boolean(payload.message_id)
+      );
+
+      console.log(
+        'Identificador original recibido:',
+        Boolean(payload.original_message_id)
+      );
+
+      console.log(
+        'Identificador de conversación recibido:',
+        Boolean(payload.thread_id)
+      );
+
       console.log('================================');
     }
 
-    // 1. Validar secreto.
+    // ========================================
+    // 1. VALIDAR SECRETO
+    // ========================================
+
     if (!validarSecreto(payload.secret)) {
       return res.status(401).json({
         ok: false,
@@ -891,12 +1198,18 @@ router.post('/capturas', async (req, res) => {
 
     const db = getSupabaseAdmin();
 
-    // 2. Validar asunto.
-    const title = textoOpcional(payload.subject);
+    // ========================================
+    // 2. VALIDAR ASUNTO
+    // ========================================
+
+    const title = textoOpcional(
+      payload.subject
+    );
 
     if (!title) {
       return res.status(400).json({
         ok: false,
+        complete: false,
         error: 'subject es obligatorio'
       });
     }
@@ -904,44 +1217,96 @@ router.post('/capturas', async (req, res) => {
     if (title.length > 500) {
       return res.status(400).json({
         ok: false,
-        error: 'El asunto supera los 500 caracteres'
+        complete: false,
+        error: 'El asunto supera los 500 caracteres.'
       });
     }
 
-    // 3. Validar identificador del correo.
-    const messageId = textoOpcional(payload.message_id);
+    // ========================================
+    // 3. IDENTIFICADOR ÚNICO DEL MENSAJE
+    // ========================================
+
+    const messageId =
+      obtenerIdentificadorMensaje(payload);
 
     if (!messageId) {
       return res.status(400).json({
         ok: false,
-        error: 'message_id es obligatorio'
+        complete: false,
+        error:
+          'Falta el identificador del mensaje. Se requiere gmail_message_id, message_id u original_message_id.'
       });
     }
 
-    // 4. Validar fecha.
-    const receivedAt = obtenerFecha(payload.received_at);
+    const threadId = textoOpcional(
+      payload.thread_id ||
+      payload.gmail_thread_id
+    );
+
+    const originalMessageId = textoOpcional(
+      payload.original_message_id ||
+      payload.originalMessageId
+    );
+
+    // ========================================
+    // 4. VALIDAR FECHA
+    // ========================================
+
+    const receivedAt = obtenerFecha(
+      payload.received_at
+    );
 
     if (!receivedAt) {
       return res.status(400).json({
         ok: false,
-        error: 'received_at contiene una fecha inválida'
+        complete: false,
+        error: 'received_at contiene una fecha inválida.'
       });
     }
 
-    // 5. Validar estructura de adjuntos.
-    const attachments = Array.isArray(payload.attachments)
+    // ========================================
+    // 5. VALIDAR ADJUNTOS
+    // ========================================
+
+    const attachments = Array.isArray(
+      payload.attachments
+    )
       ? payload.attachments
       : [];
 
-    if (attachments.length > 100) {
+    if (attachments.length > MAX_ADJUNTOS) {
       return res.status(400).json({
         ok: false,
-        error: 'La solicitud supera el máximo de 100 adjuntos.'
+        complete: false,
+        error:
+          'Se supera el máximo permitido de adjuntos.'
       });
     }
 
-    // 6. Consultar si el correo ya fue registrado.
-    const { data: existing, error: duplicateError } = await db
+    if (attachments.length === 0) {
+      return res.status(422).json({
+        ok: false,
+        complete: false,
+        error:
+          'El correo llegó sin adjuntos. No se marcará como procesado.'
+      });
+    }
+
+    const adjuntosNormalizados = attachments.map(
+      normalizarAdjunto
+    );
+
+    // No eliminar adjuntos inline.
+    // Se reciben y procesan igual que los demás archivos.
+
+    // ========================================
+    // 6. COMPROBAR CORREO DUPLICADO
+    // ========================================
+
+    const {
+      data: existing,
+      error: duplicateError
+    } = await db
       .from('activities')
       .select('id')
       .eq('source_type', 'outlook')
@@ -961,25 +1326,39 @@ router.post('/capturas', async (req, res) => {
       });
     }
 
-    // 7. Si existe, reparar/verificar adjuntos e historial.
+    // ========================================
+    // 7. SI YA EXISTE, COMPLETAR ADJUNTOS
+    // ========================================
+
     if (existing) {
+      console.log(
+        'CORREO DUPLICADO. SE REUTILIZA ACTIVIDAD:',
+        existing.id
+      );
+
       return await completarActividadExistente({
         res,
         activityId: existing.id,
-        attachments,
-        message: 'Actividad existente verificada correctamente.'
+        attachments: adjuntosNormalizados,
+        message:
+          'Actividad existente verificada correctamente.'
       });
     }
 
-    // 8. Clasificación automática.
+    // ========================================
+    // 8. CLASIFICACIÓN
+    // ========================================
+
     const datosClasificacion = {
       subject: title,
+
       body:
         payload.body ||
         payload.body_preview ||
         payload.observations ||
         '',
-      attachments
+
+      attachments: adjuntosNormalizados
     };
 
     const clasificacion = clasificarActividad(
@@ -992,7 +1371,10 @@ router.post('/capturas', async (req, res) => {
       ? clasificacion.operational_tags
       : [];
 
-    // 9. Detectar prioridad.
+    // ========================================
+    // 9. PRIORIDAD
+    // ========================================
+
     const prioridadDetectada = detectarPrioridad({
       subject: title,
       body: datosClasificacion.body
@@ -1005,15 +1387,24 @@ router.post('/capturas', async (req, res) => {
     const priority =
       prioridadDetectada !== 'media'
         ? prioridadDetectada
-        : PRIORIDADES_VALIDAS.includes(prioridadRecibida)
+        : PRIORIDADES_VALIDAS.includes(
+            prioridadRecibida
+          )
           ? prioridadRecibida
           : 'media';
 
-    // 10. Contar modelos en Excel.
-    const resultadoExcel = contarModelosExcel(attachments);
+    // ========================================
+    // 10. CONTAR MODELOS DE EXCEL
+    // ========================================
+
+    const resultadoExcel = contarModelosExcel(
+      adjuntosNormalizados
+    );
 
     let quantity = resultadoExcel.quantity;
-    let quantitySource = resultadoExcel.quantity_source;
+
+    let quantitySource =
+      resultadoExcel.quantity_source;
 
     if (
       quantity === null &&
@@ -1021,7 +1412,9 @@ router.post('/capturas', async (req, res) => {
       payload.quantity !== null &&
       String(payload.quantity).trim() !== ''
     ) {
-      const cantidad = Number(payload.quantity);
+      const cantidad = Number(
+        payload.quantity
+      );
 
       if (
         Number.isInteger(cantidad) &&
@@ -1032,34 +1425,44 @@ router.post('/capturas', async (req, res) => {
       }
     }
 
-    console.log('====== CONTEO DE MODELOS ======');
-    console.log('Cantidad:', quantity);
-    console.log('Origen:', quantitySource);
-    console.log('Archivos:', resultadoExcel.archivos_leidos);
-    console.log(
-      'Estructura encontrada:',
-      resultadoExcel.estructura_encontrada
-    );
-    console.log('================================');
+    // ========================================
+    // 11. PREPARAR ACTIVIDAD
+    // ========================================
 
-    // 11. Preparar actividad.
     const activity = {
       source_type: 'outlook',
+
+      // ID único del mensaje individual.
       source_email_id: messageId,
+
       title,
 
-      requester_name: textoOpcional(payload.from_name),
-      requester_email: textoOpcional(payload.from_email),
+      requester_name: textoOpcional(
+        payload.from_name
+      ),
+
+      requester_email: textoOpcional(
+        payload.from_email
+      ),
 
       quantity,
       quantity_source: quantitySource,
       priority,
 
-      activity_type: clasificacion.activity_type,
-      catalog_category: clasificacion.catalog_category,
-      classification_status: clasificacion.classification_status,
-      classification_confidence: clasificacion.classification_confidence,
-      matched_terms: clasificacion.matched_terms,
+      activity_type:
+        clasificacion.activity_type,
+
+      catalog_category:
+        clasificacion.catalog_category,
+
+      classification_status:
+        clasificacion.classification_status,
+
+      classification_confidence:
+        clasificacion.classification_confidence,
+
+      matched_terms:
+        clasificacion.matched_terms,
 
       operational_tags: operationalTags,
 
@@ -1072,33 +1475,45 @@ router.post('/capturas', async (req, res) => {
       received_at: receivedAt
     };
 
-    // 12. Insertar actividad.
-    const { data: created, error: insertError } = await db
+    // ========================================
+    // 12. INSERTAR ACTIVIDAD
+    // ========================================
+
+    const {
+      data: created,
+      error: insertError
+    } = await db
       .from('activities')
       .insert(activity)
       .select('id')
       .single();
 
     if (insertError) {
-      // Puede ocurrir si dos solicitudes llegan al mismo tiempo.
+      // Otra ejecución pudo insertar el mismo correo
+      // entre la consulta y el INSERT.
+
       if (insertError.code === '23505') {
-        const { data: duplicate, error: retryLookupError } = await db
+        const {
+          data: duplicate,
+          error: lookupError
+        } = await db
           .from('activities')
           .select('id')
           .eq('source_type', 'outlook')
           .eq('source_email_id', messageId)
           .maybeSingle();
 
-        if (retryLookupError) {
+        if (lookupError) {
           console.error(
             'ERROR RECUPERANDO DUPLICADO:',
-            retryLookupError
+            lookupError
           );
 
           return res.status(500).json({
             ok: false,
             complete: false,
-            error: 'No se pudo recuperar la actividad duplicada.'
+            error:
+              'No se pudo recuperar la actividad duplicada.'
           });
         }
 
@@ -1106,8 +1521,9 @@ router.post('/capturas', async (req, res) => {
           return await completarActividadExistente({
             res,
             activityId: duplicate.id,
-            attachments,
-            message: 'Actividad existente verificada correctamente.'
+            attachments: adjuntosNormalizados,
+            message:
+              'Actividad existente verificada correctamente.'
           });
         }
       }
@@ -1120,11 +1536,15 @@ router.post('/capturas', async (req, res) => {
       return res.status(500).json({
         ok: false,
         complete: false,
-        error: 'No se pudo registrar la actividad.'
+        error:
+          'No se pudo registrar la actividad.'
       });
     }
 
-    // 13. Registrar historial.
+    // ========================================
+    // 13. REGISTRAR HISTORIAL
+    // ========================================
+
     const historyRegistered = await asegurarHistorial(
       created.id,
       clasificacion,
@@ -1132,43 +1552,70 @@ router.post('/capturas', async (req, res) => {
       quantity
     );
 
-    // 14. Procesar adjuntos.
+    // ========================================
+    // 14. GUARDAR TODOS LOS ARCHIVOS
+    // ========================================
+
     const resultadoAdjuntos = await procesarAdjuntos(
       created.id,
-      attachments
+      adjuntosNormalizados
     );
 
-    // 15. Diagnóstico.
+    // ========================================
+    // 15. DIAGNÓSTICO
+    // ========================================
+
     console.log('====== WEBHOOK OUTLOOK ======');
     console.log('Actividad:', created.id);
     console.log('Correo:', messageId);
-    console.log('Categoría:', clasificacion.catalog_category);
-    console.log('Etiquetas operativas:', operationalTags);
+    console.log('Conversación:', threadId || 'No recibida');
     console.log(
-      'Clasificación:',
-      clasificacion.classification_status
+      'Mensaje original:',
+      originalMessageId || 'No recibido'
     );
+
+    console.log(
+      'Categoría:',
+      clasificacion.catalog_category
+    );
+
     console.log('Prioridad:', priority);
-    console.log('Cantidad de modelos:', quantity);
-    console.log('Origen cantidad:', quantitySource);
+    console.log('Cantidad:', quantity);
     console.log('Adjuntos:', resultadoAdjuntos);
-    console.log('Historial registrado:', historyRegistered);
+    console.log('Historial:', historyRegistered);
     console.log('=============================');
 
-    // 16. Respuesta para Apps Script.
+    // ========================================
+    // 16. CONFIRMACIÓN PARA APPS SCRIPT
+    // ========================================
+
     return responderRecepcion({
       res,
       status: 201,
+
       activityId: created.id,
+
       duplicate: false,
+
       attachments: resultadoAdjuntos,
+
       historyRegistered,
-      message: 'Actividad registrada correctamente.',
+
+      message:
+        'Actividad registrada correctamente.',
+
       extra: {
-        activity_type: clasificacion.activity_type,
-        catalog_category: clasificacion.catalog_category,
-        operational_tags: operationalTags,
+        activity_type:
+          clasificacion.activity_type,
+
+        catalog_category:
+          clasificacion.catalog_category,
+
+        operational_tags:
+          operationalTags,
+
         priority,
+
         status: 'disponible',
 
         classification_status:
@@ -1177,9 +1624,20 @@ router.post('/capturas', async (req, res) => {
         classification_confidence:
           clasificacion.classification_confidence,
 
-        matched_terms: clasificacion.matched_terms,
+        matched_terms:
+          clasificacion.matched_terms,
+
         quantity,
-        quantity_source: quantitySource,
+
+        quantity_source:
+          quantitySource,
+
+        message_id: messageId,
+
+        thread_id: threadId,
+
+        original_message_id:
+          originalMessageId,
 
         excel: {
           estructura_encontrada:
@@ -1188,13 +1646,17 @@ router.post('/capturas', async (req, res) => {
           archivos_leidos:
             resultadoExcel.archivos_leidos,
 
-          errores: resultadoExcel.errores
+          errores:
+            resultadoExcel.errores
         }
       }
     });
 
   } catch (error) {
-    console.error('ERROR GENERAL WEBHOOK:', error);
+    console.error(
+      'ERROR GENERAL WEBHOOK:',
+      error
+    );
 
     return res.status(500).json({
       ok: false,

@@ -35,9 +35,9 @@ app.set('views', path.join(__dirname, 'views'));
 // ========================================
 
 app.use(
-    helmet({
-        contentSecurityPolicy: false
-    })
+helmet({
+    contentSecurityPolicy: false
+})
 );
 
 // ========================================
@@ -45,16 +45,18 @@ app.use(
 // ========================================
 
 app.use(
-    express.urlencoded({
-        extended: true,
-        limit: '1mb'
-    })
+express.urlencoded({
+    extended: true,
+    limit: '1mb',
+    parameterLimit: 1000
+})
 );
 
 app.use(
-    express.json({
-        limit: '4mb'
-    })
+express.json({
+    limit: '4mb',
+    strict: true
+})
 );
 
 // ========================================
@@ -62,12 +64,12 @@ app.use(
 // ========================================
 
 app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Referrer-Policy', 'no-referrer');
+res.setHeader('Cache-Control', 'no-store, private');
+res.setHeader('Pragma', 'no-cache');
+res.setHeader('Expires', '0');
+res.setHeader('Referrer-Policy', 'no-referrer');
 
-    next();
+next();
 });
 
 // ========================================
@@ -75,10 +77,10 @@ app.use((req, res, next) => {
 // ========================================
 
 app.use(
-    express.static(path.join(__dirname, 'public'), {
-        etag: true,
-        maxAge: '1h'
-    })
+express.static(path.join(__dirname, 'public'), {
+    etag: true,
+    maxAge: '1h'
+})
 );
 
 // ========================================
@@ -99,18 +101,18 @@ app.use('/', authRoutes);
 // ========================================
 
 app.use(
-    '/sesion/:sessionToken/admin/tickets',
-    adminRoutes
+'/sesion/:sessionToken/admin/tickets',
+adminRoutes
 );
 
 app.use(
-    '/sesion/:sessionToken/tecnico/tickets',
-    tecnicoRoutes
+'/sesion/:sessionToken/tecnico/tickets',
+tecnicoRoutes
 );
 
 app.use(
-    '/sesion/:sessionToken/usuario/tickets',
-    usuarioRoutes
+'/sesion/:sessionToken/usuario/tickets',
+usuarioRoutes
 );
 
 // ========================================
@@ -118,8 +120,8 @@ app.use(
 // ========================================
 
 app.use(
-    '/sesion/:sessionToken/actividades',
-    actividadesRoutes
+'/sesion/:sessionToken/actividades',
+actividadesRoutes
 );
 
 // ========================================
@@ -127,7 +129,7 @@ app.use(
 // ========================================
 
 app.get('/', (req, res) => {
-    res.redirect('/login');
+return res.redirect('/login');
 });
 
 // ========================================
@@ -135,7 +137,7 @@ app.get('/', (req, res) => {
 // ========================================
 
 app.use((req, res) => {
-    res.status(404).send('Página no encontrada.');
+return res.status(404).send('Página no encontrada.');
 });
 
 // ========================================
@@ -143,27 +145,61 @@ app.use((req, res) => {
 // ========================================
 
 app.use((err, req, res, next) => {
-    console.error('ERROR GENERAL:', err);
+console.error('ERROR GENERAL:', {
+    method: req.method,
+    path: req.originalUrl,
+    type: err.type || null,
+    status: err.status || err.statusCode || null,
+    message: err.message || 'Error desconocido'
+});
 
-    if (res.headersSent) {
-        return next(err);
-    }
+if (res.headersSent) {
+    return next(err);
+}
 
-    const status =
-        Number(err.status || err.statusCode) || 500;
+const status =
+    Number(err.status || err.statusCode) || 500;
 
-    if (status === 413) {
-        return res.status(413).json({
-            ok: false,
-            error: 'La solicitud supera el límite permitido de 4 MB.'
-        });
-    }
+if (
+    status === 413 ||
+    err.type === 'entity.too.large'
+) {
+    return res.status(413).json({
+    ok: false,
+    complete: false,
+    code: 'REQUEST_TOO_LARGE',
+    error: 'La solicitud supera el límite permitido de 4 MB.'
+    });
+}
 
-    res.status(status).send(
-        status >= 500
-            ? 'Ocurrió un error interno del servidor.'
-            : err.message
-    );
+if (
+    status === 400 &&
+    err.type === 'entity.parse.failed'
+) {
+    return res.status(400).json({
+    ok: false,
+    complete: false,
+    code: 'INVALID_JSON',
+    error: 'El contenido JSON de la solicitud no es válido.'
+    });
+}
+
+if (err.type === 'encoding.unsupported') {
+    return res.status(415).json({
+    ok: false,
+    complete: false,
+    code: 'UNSUPPORTED_ENCODING',
+    error: 'La codificación de la solicitud no es compatible.'
+    });
+}
+
+return res.status(
+    status >= 400 && status < 600 ? status : 500
+).send(
+    status >= 500
+    ? 'Ocurrió un error interno del servidor.'
+    : err.message || 'Solicitud no válida.'
+);
 });
 
 // ========================================
@@ -171,10 +207,10 @@ app.use((err, req, res, next) => {
 // ========================================
 
 if (require.main === module) {
-    const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
     app.listen(PORT, () => {
-        console.log(`Servidor iniciado en el puerto ${PORT}`);
+    console.log(`Servidor iniciado en el puerto ${PORT}`);
     });
 }
 
